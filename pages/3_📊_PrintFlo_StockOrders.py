@@ -35,14 +35,15 @@ st.write("Upload PrintFlo CSV or Excel files to automatically generate visual HT
 st.divider()
 
 # --- BACKEND LOGIC: Generate HTML & Excel ---
-def generate_printflo_files(df):
+# Added 'title_name' as an argument to inject the spreadsheet name
+def generate_printflo_files(df, title_name):
     # 1. Clean up address columns so we don't get "nan" printed
     addr_cols = ['DeliveryAddress1', 'DeliveryAddress2', 'DeliveryAddress3', 'DeliveryTown', 'DeliveryCounty', 'DeliveryPostCode']
     existing_addr = [c for c in addr_cols if c in df.columns]
     df[existing_addr] = df[existing_addr].fillna('')
 
-    # 2. Build the HTML String
-    html = "<!DOCTYPE html>\n<html>\n<head>\n<title>Fulfillment Pick List</title>\n"
+    # 2. Build the HTML String dynamically with the title_name
+    html = f"<!DOCTYPE html>\n<html>\n<head>\n<title>{title_name}</title>\n"
     html += "<style>\n"
     html += "body { font-family: Arial, sans-serif; margin: 20px; background-color: #f9f9f9; }\n"
     html += "h1 { color: #333; text-align: center; border-bottom: 2px solid #ccc; padding-bottom: 10px; }\n"
@@ -56,7 +57,9 @@ def generate_printflo_files(df):
     html += ".qty-cell { font-size: 18px; font-weight: bold; text-align: center; }\n"
     html += "@media print { body { background-color: white; margin: 0; } .order { box-shadow: none; border: none; border-bottom: 2px dashed #ccc; padding-bottom: 40px; margin-bottom: 40px; page-break-inside: avoid; } }\n"
     html += "</style>\n</head>\n<body>\n"
-    html += "<h1>Fulfillment Pick List</h1>\n"
+    
+    # Injecting the title onto the printed page header
+    html += f"<h1>{title_name}</h1>\n"
 
     # Group by OrderId and VenueName
     if 'OrderId' in df.columns and 'VenueName' in df.columns:
@@ -99,14 +102,12 @@ def generate_printflo_files(df):
     # 3. Build the Excel Data
     df_excel = df.copy()
     
-    # Target whichever image URL column exists in the data
     image_col = 'ProductImageURL' if 'ProductImageURL' in df_excel.columns else 'ImageURL'
     if image_col in df_excel.columns:
         df_excel['Product Image Preview'] = df_excel[image_col].apply(
             lambda x: f'=IMAGE("{x}")' if pd.notna(x) and str(x).startswith('http') else ''
         )
 
-    # Output only the specific columns needed
     desired_cols = ['OrderId', 'VenueName', 'DeliveryAddress1', 'DeliveryAddress2', 'DeliveryTown', 'DeliveryPostCode', 'SKU', 'Name', 'Qty', 'Product Image Preview']
     output_cols = [col for col in desired_cols if col in df_excel.columns]
 
@@ -133,7 +134,6 @@ with right_col:
                 with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
                     
                     for file in uploaded_files:
-                        # Handle CSV or Excel dynamically
                         try:
                             if file.name.endswith('.csv'):
                                 df = pd.read_csv(file)
@@ -143,18 +143,18 @@ with right_col:
                             st.error(f"Error reading {file.name}: {e}")
                             continue
 
-                        # Generate our custom files from the logic function
-                        html_string, excel_bytes = generate_printflo_files(df)
-                        
+                        # Extract the filename without the .csv or .xlsx extension
                         base_name = os.path.splitext(file.name)[0]
+                        
+                        # Pass the base_name into the generation function
+                        html_string, excel_bytes = generate_printflo_files(df, title_name=base_name)
+                        
                         html_name = f"PickList_{base_name}.html"
                         excel_name = f"PickList_{base_name}.xlsx"
 
-                        # Add both to the ZIP
                         zip_file.writestr(html_name, html_string)
                         zip_file.writestr(excel_name, excel_bytes)
                         
-                        # Just render the FIRST file's HTML to the screen so they can see it looks right
                         if file == uploaded_files[0]:
                             st.success(f"Previewing first file: {html_name}")
                             components.html(html_string, height=600, scrolling=True)
