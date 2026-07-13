@@ -10,7 +10,7 @@ st.markdown("""
     .stButton>button { background-color: #000000; color: white; border-radius: 4px; font-weight: bold; padding: 10px; width: 100%; border: none; }
     .stButton>button:hover { background-color: #333333; color: white; }
     .metric-card { background-color: #f8f9fa; padding: 20px; border-radius: 8px; border: 1px solid #e0e0e0; text-align: center; margin-bottom: 15px; }
-    .price-text { color: #004B87; font-size: 36px; font-weight: bold; margin: 0; }
+    .price-text { color: #004B87; font-size: 32px; font-weight: bold; margin: 0; }
     .working-out-box { background-color: #e9ecef; padding: 15px; border-radius: 5px; font-family: monospace; font-size: 14px; color: #333; }
     </style>
     """, unsafe_allow_html=True)
@@ -29,8 +29,8 @@ DHL_RATES = {
     "Next Working Day Pre 12": {"base": 12.5454, "per_kg_over_20": 0.3399},
     "Next Working Day Pre 10": {"base": 12.4321, "per_kg_over_20": 0.3399},
     "Next Working Day Pre 9": {"base": 15.1616, "per_kg_over_20": 0.3399},
-    "Saturday": {"base": 15.0000, "per_kg_over_20": 0.3399},        # Placeholder estimate
-    "Saturday Pre 12": {"base": 20.0000, "per_kg_over_20": 0.3399}, # Placeholder estimate
+    "Saturday": {"base": 15.0000, "per_kg_over_20": 0.3399},        
+    "Saturday Pre 12": {"base": 20.0000, "per_kg_over_20": 0.3399}, 
 }
 
 # Pallet Postcode Mapping (Zone 2, 3, 4, 5, 6)
@@ -81,7 +81,6 @@ with tab_pallet:
         p_wid_mm = d2.number_input("Width (mm)", value=1000)
         p_hei_mm = d3.number_input("Height (mm)", value=1000)
         
-        # Strict Dropdown for Pallet Weights
         p_weight = st.selectbox("Weight Bracket", [150, 300, 600, 1200], format_func=lambda x: f"Max {x} kg")
         p_markup = st.number_input("KEP Margin (%)", min_value=0, value=40, key="p_mark")
 
@@ -89,37 +88,31 @@ with tab_pallet:
         if not p_postcode:
             st.warning("Please enter a postcode prefix.")
         else:
-            # Step 1: Auto-Detect Zone
             detected_zone = next((z for z, prefixes in PALLET_POSTCODES.items() if p_postcode in prefixes), "Zone 2 (Default/Unknown)")
             safe_zone = detected_zone if "Default" not in detected_zone else "Zone 2"
             
-            # Step 2: Convert mm to meters
             p_len_m = p_len_mm / 1000
             p_wid_m = p_wid_mm / 1000
             p_hei_m = p_hei_mm / 1000
             
-            # Step 3: Determine Billable Pallet Spaces (Oversize logic)
             spaces_len = math.ceil(p_len_m / 1.2)
             spaces_wid = math.ceil(p_wid_m / 1.2)
             billable_spaces_per_pallet = spaces_len * spaces_wid
             total_billable_spaces = billable_spaces_per_pallet * p_qty
 
-            # Step 4: Determine Pallet Size based strictly on weight and height limits
             assigned_size = "Full"
             if p_weight <= 150 and p_hei_m <= 0.6: assigned_size = "Micro"
             elif p_weight <= 300 and p_hei_m <= 0.6: assigned_size = "Quarter"
             elif p_weight <= 600 and p_hei_m <= 2.2: assigned_size = "Half"
             elif p_weight <= 1200 and p_hei_m <= 2.2: assigned_size = "Full"
 
-            # Step 5: Cost Calculation
             base_rate = PALLET_RATES[safe_zone].get(assigned_size, 60.00)
             if p_service == "Standard":
-                base_rate = max(0, base_rate - 4.00) # Standard is usually £4 cheaper
+                base_rate = max(0, base_rate - 4.00) 
             
             job_rate_internal = base_rate * total_billable_spaces
             sell_price = job_rate_internal * (1 + (p_markup / 100))
 
-            # Display Output
             st.markdown(f"""
             <div class='metric-card'>
                 <h4>Total KEP Sell Price</h4>
@@ -163,46 +156,56 @@ with tab_dhl:
     with col2:
         st.write("**2. Service Options**")
         d_service = st.selectbox("Service Required", list(DHL_RATES.keys()))
-        d_markup = st.number_input("KEP Margin (%)", min_value=0, value=30, key="d_mark")
+        d_markup = st.number_input("KEP Custom Margin (%)", min_value=0, value=30, key="d_mark")
 
-    if st.button("Generate DHL Quote", use_container_width=True):
+    if st.button("Generate DHL Quote Options", use_container_width=True):
         
-        # Convert mm to cm
         d_len_cm = d_len_mm / 10
         d_wid_cm = d_wid_mm / 10
         d_hei_cm = d_hei_mm / 10
 
-        # Grab Base Rates
         rates = DHL_RATES[d_service]
         per_box_cost = rates["base"]
         
-        # Overweight Math
         overweight_cost = 0
         if d_weight > 20:
             extra_kg = math.ceil(d_weight - 20)
             overweight_cost = extra_kg * rates["per_kg_over_20"]
             per_box_cost += overweight_cost
             
-        # Long Length Math
         ll_surcharge = 0
         max_dim_cm = max(d_len_cm, d_wid_cm, d_hei_cm)
         if max_dim_cm >= 140 and max_dim_cm < 160: ll_surcharge = 7.50
         elif max_dim_cm >= 160: ll_surcharge = 15.00
         
         per_box_cost += ll_surcharge
-        
-        # Totals
         internal_total = per_box_cost * d_qty
         
-        # Check if the calculator is using a flat +£6 markup (like the CSV) or percentage. Defaulting to percentage.
-        sell_price = internal_total * (1 + (d_markup / 100))
+        # --- CALCULATE ALL 4 PRICING OPTIONS ---
+        opt1_per_box = per_box_cost * (1 + (d_markup / 100))
+        opt1_total = opt1_per_box * d_qty
+        
+        opt2_per_box = 9.95
+        opt2_total = opt2_per_box * d_qty
+        
+        opt3_per_box = 10.95
+        opt3_total = opt3_per_box * d_qty
+        
+        opt4_per_box = 12.95
+        opt4_total = opt4_per_box * d_qty
 
-        st.markdown(f"""
-        <div class='metric-card'>
-            <h4>Total KEP Sell Price</h4>
-            <p class='price-text'>£{sell_price:,.2f}</p>
-        </div>
-        """, unsafe_allow_html=True)
+        # Display the side-by-side pricing grid
+        st.write(f"### Pricing Options (Internal Cost: £{internal_total:.2f} / £{per_box_cost:.2f} per box)")
+        
+        c1, c2, c3, c4 = st.columns(4)
+        with c1:
+            st.markdown(f"<div class='metric-card'><h4>Custom {d_markup}%</h4><p class='price-text'>£{opt1_total:,.2f}</p><p style='color:gray;'>£{opt1_per_box:,.2f} per box</p></div>", unsafe_allow_html=True)
+        with c2:
+            st.markdown(f"<div class='metric-card'><h4>Flat Tier 1</h4><p class='price-text'>£{opt2_total:,.2f}</p><p style='color:gray;'>£9.95 per box</p></div>", unsafe_allow_html=True)
+        with c3:
+            st.markdown(f"<div class='metric-card'><h4>Flat Tier 2</h4><p class='price-text'>£{opt3_total:,.2f}</p><p style='color:gray;'>£10.95 per box</p></div>", unsafe_allow_html=True)
+        with c4:
+            st.markdown(f"<div class='metric-card'><h4>Flat Tier 3</h4><p class='price-text'>£{opt4_total:,.2f}</p><p style='color:gray;'>£12.95 per box</p></div>", unsafe_allow_html=True)
 
         with st.expander("🔍 View Working Out & Transparency"):
             st.markdown(f"""
@@ -216,9 +219,7 @@ with tab_dhl:
             <b>3. Cost Breakdown:</b><br>
             - Base {d_service} Rate: £{rates['base']:.2f}<br>
             - Internal Cost Per Box: £{per_box_cost:.2f}<br>
-            - Total Internal Cost (x{d_qty} boxes): £{internal_total:.2f}<br>
-            - Applied Margin: {d_markup}%<br>
-            - Final Sell: <b>£{sell_price:.2f}</b>
+            - Total Internal Cost (x{d_qty} boxes): £{internal_total:.2f}
             </div>
             """, unsafe_allow_html=True)
 
