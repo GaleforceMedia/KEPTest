@@ -10,7 +10,6 @@ import streamlit.components.v1 as components
 st.set_page_config(page_title="Tracking Consolidator", page_icon="🚚", layout="wide")
 
 # --- HELPER: BASE64 IMAGE ENCODER ---
-# This converts local images into text so they can be embedded directly inside the HTML file
 def get_base64_image(filepath):
     if os.path.exists(filepath):
         with open(filepath, "rb") as img_file:
@@ -25,9 +24,9 @@ BRANDING = {
     "F181494": {
         "name": "PrintFlo",
         "title": "PrintFlo Dispatch Report",
-        "primary_color": "#ff6600", # PrintFlo Orange
-        "header_bg": "#1C1C1E",     # Dark sleek header
-        "header_text": "#ffffff",
+        "primary_color": "#005EB8", # Clean PrintFlo Blue
+        "header_bg": "#ffffff",     # Crisp White header
+        "header_text": "#333333",   # Dark text for readability on white
         "link": "https://printflo.co.uk/",
         "logo_text": "PrintFlo Fulfillment",
         "logo_file": "printflo-logo.png"
@@ -100,8 +99,8 @@ def generate_branded_html(df, brand_code, date_str):
         .container {{ max-width: 1100px; margin: 0 auto; background: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }}
         .header {{ background-color: {brand['header_bg']}; border-bottom: 4px solid {brand['primary_color']}; color: {brand['header_text']}; padding: 20px 30px; display: flex; justify-content: space-between; align-items: center; }}
         .header h1 {{ margin: 0; font-size: 24px; letter-spacing: 1px; color: {brand['header_text']}; }}
-        .header a {{ color: {brand['header_text']}; text-decoration: none; font-size: 14px; opacity: 0.8; transition: opacity 0.2s; }}
-        .header a:hover {{ opacity: 1; }}
+        .header a {{ color: {brand['header_text']}; text-decoration: none; font-size: 14px; opacity: 0.8; transition: opacity 0.2s; font-weight: bold; }}
+        .header a:hover {{ opacity: 1; color: {brand['primary_color']}; }}
         .content {{ padding: 30px; }}
         .meta {{ margin-bottom: 25px; font-size: 14px; color: #666; border-bottom: 2px solid #eee; padding-bottom: 15px; }}
         table {{ width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 14px; }}
