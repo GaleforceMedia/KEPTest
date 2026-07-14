@@ -148,8 +148,8 @@ def generate_branded_html(df, brand_code, date_str):
         trk = str(row.get('Shipment number', '')).replace('.0', '')
         if trk.lower() == 'nan': trk = ""
         
-        # Build the DHL Tracking URL
-        track_link = f"https://track.dhlparcel.co.uk/?trackingnumber={trk}" if trk else "#"
+        # --- THE UPDATED DHL TRACKING URL ---
+        track_link = f"https://www.dhl.com/gb-en/home/tracking.html?tracking-id={trk}&submit=1" if trk else "#"
         track_html = f"<a href='{track_link}' class='track-btn' target='_blank'>Track {trk}</a>" if trk else "<em>No Tracking</em>"
 
         html += f"""
