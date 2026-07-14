@@ -8,12 +8,11 @@ import streamlit.components.v1 as components
 st.set_page_config(page_title="Tracking Consolidator", page_icon="🚚", layout="wide")
 
 # --- BRANDING DICTIONARIES ---
-# This maps the Account Number to specific CSS styles and titles
 BRANDING = {
     "F181494": {
         "name": "PrintFlo",
         "title": "PrintFlo Dispatch Report",
-        "primary_color": "#ff6600", # PrintFlo Orange
+        "primary_color": "#ff6600", 
         "bg_color": "#ffffff",
         "header_text": "#ffffff",
         "link": "https://printflo.co.uk/",
@@ -22,7 +21,7 @@ BRANDING = {
     "F199630": {
         "name": "Mamas_and_Papas",
         "title": "Mamas & Papas Dispatch Report",
-        "primary_color": "#000000", # M&P Black/Minimalist
+        "primary_color": "#000000", 
         "bg_color": "#ffffff",
         "header_text": "#ffffff",
         "link": "https://www.mamasandpapas.com/",
@@ -31,7 +30,7 @@ BRANDING = {
     "F090402": {
         "name": "KEP_Print_Group",
         "title": "KEP Dispatch Report",
-        "primary_color": "#004B87", # KEP Blue
+        "primary_color": "#004B87", 
         "bg_color": "#ffffff",
         "header_text": "#ffffff",
         "link": "https://www.kep.co.uk/",
@@ -39,7 +38,6 @@ BRANDING = {
     }
 }
 
-# --- DEFAULT FALLBACK BRANDING ---
 DEFAULT_BRAND = {
     "name": "General_Dispatch",
     "title": "Dispatch Report",
@@ -60,7 +58,7 @@ st.markdown("""
     """, unsafe_allow_html=True)
 
 st.title("🚚 Post-Ship Tracking Consolidator")
-st.write("Upload the End-of-Day DHL tracking export. The system will separate the data by Account Number and generate branded HTML tracking dashboards for each client.")
+st.write("Upload your DHL Dashboard Summary export. The system will separate the data by Account Number and generate branded HTML tracking dashboards.")
 st.divider()
 
 # --- HELPER: HTML GENERATOR ---
@@ -73,7 +71,7 @@ def generate_branded_html(df, brand_code, date_str):
     <title>{brand['title']}</title>
     <style>
         body {{ font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 20px; background-color: #f4f7f6; color: #333; }}
-        .container {{ max-width: 1000px; margin: 0 auto; background: {brand['bg_color']}; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }}
+        .container {{ max-width: 1100px; margin: 0 auto; background: {brand['bg_color']}; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }}
         .header {{ background-color: {brand['primary_color']}; color: {brand['header_text']}; padding: 25px 30px; display: flex; justify-content: space-between; align-items: center; }}
         .header h1 {{ margin: 0; font-size: 24px; letter-spacing: 1px; }}
         .header a {{ color: {brand['header_text']}; text-decoration: none; font-size: 14px; opacity: 0.8; }}
@@ -85,6 +83,9 @@ def generate_branded_html(df, brand_code, date_str):
         tr:hover {{ background-color: #fcfcfc; }}
         .track-btn {{ background-color: {brand['primary_color']}; color: {brand['header_text']} !important; padding: 8px 15px; border-radius: 4px; text-decoration: none; font-weight: bold; font-size: 12px; display: inline-block; transition: opacity 0.2s; }}
         .track-btn:hover {{ opacity: 0.8; }}
+        .status-badge {{ font-weight: bold; font-size: 13px; }}
+        .eta-text {{ font-size: 12px; color: #777; margin-top: 4px; display: block; }}
+        .ref-text {{ color: #777; font-size: 12px; margin-top: 4px; display: block; }}
     </style>
     </head>
     <body>
@@ -95,38 +96,57 @@ def generate_branded_html(df, brand_code, date_str):
             </div>
             <div class="content">
                 <div class="meta">
-                    <strong>Date:</strong> {date_str} <br>
+                    <strong>Report Date:</strong> {date_str} <br>
                     <strong>Total Shipments:</strong> {len(df)}
                 </div>
                 <table>
                     <thead>
                         <tr>
-                            <th>Reference / Store</th>
+                            <th>Store / Recipient</th>
                             <th>Postcode</th>
                             <th>Service</th>
-                            <th>Items</th>
+                            <th>Status & ETA</th>
                             <th>Tracking Action</th>
                         </tr>
                     </thead>
                     <tbody>
     """
     
-    # Identify dynamic columns from the uploaded DHL export
-    cols = [str(c).lower() for c in df.columns]
-    
-    # Find the best matching columns for our table
-    ref_col = next((c for c in df.columns if 'ref' in str(c).lower() or 'name' in str(c).lower()), 'Unknown')
-    postcode_col = next((c for c in df.columns if 'postcode' in str(c).lower() or 'address 4' in str(c).lower()), 'Unknown')
-    service_col = next((c for c in df.columns if 'service desc' in str(c).lower() or 'service' in str(c).lower()), 'Standard')
-    items_col = next((c for c in df.columns if 'item' in str(c).lower() or 'pieces' in str(c).lower()), '1')
-    track_col = next((c for c in df.columns if 'consignment' in str(c).lower() or 'tracking' in str(c).lower()), None)
-
+    # Process the specific column names from the DHL Dashboard Summary
     for _, row in df.iterrows():
-        ref = str(row[ref_col]) if ref_col in df.columns else "N/A"
-        pc = str(row[postcode_col]) if postcode_col in df.columns else "N/A"
-        srv = str(row[service_col]) if service_col in df.columns else "DHL Service"
-        itm = str(row[items_col]) if items_col in df.columns else "1"
-        trk = str(row[track_col]).replace('.0', '') if track_col in df.columns else ""
+        # Safely pull data from the known columns
+        ref = str(row.get('Customer reference', ''))
+        recipient = str(row.get('Business/Recipient name', 'Unknown'))
+        
+        # Combine Reference and Recipient for a cleaner look
+        store_display = f"<strong>{recipient}</strong>"
+        if ref and ref.lower() != 'nan':
+            store_display += f"<span class='ref-text'>Ref: {ref}</span>"
+
+        pc = str(row.get('Postal Code', ''))
+        
+        service_raw = str(row.get('Service', ''))
+        parcels = str(row.get('Number of parcels', '1'))
+        service_display = f"{service_raw}<span class='ref-text'>({parcels} Parcel{'s' if parcels != '1' else ''})</span>"
+        
+        status = str(row.get('Status', 'Unknown'))
+        eta_date = str(row.get('Delivery due date', ''))
+        eta_time = str(row.get('ETA', ''))
+        
+        # Clean up 'nan' string artifacts
+        eta_date = "" if eta_date.lower() == 'nan' else eta_date
+        eta_time = "" if eta_time.lower() == 'nan' else eta_time
+        
+        # Format the Status & ETA column
+        status_color = "#27ae60" if status.lower() == "delivered" else "#e67e22" if "out for delivery" in status.lower() else "#333"
+        status_display = f"<span class='status-badge' style='color: {status_color};'>{status}</span>"
+        
+        if eta_date or eta_time:
+            eta_string = f"{eta_date} {eta_time}".strip()
+            status_display += f"<span class='eta-text'>ETA: {eta_string}</span>"
+            
+        trk = str(row.get('Shipment number', '')).replace('.0', '')
+        if trk.lower() == 'nan': trk = ""
         
         # Build the DHL Tracking URL
         track_link = f"https://track.dhlparcel.co.uk/?trackingnumber={trk}" if trk else "#"
@@ -134,10 +154,10 @@ def generate_branded_html(df, brand_code, date_str):
 
         html += f"""
                         <tr>
-                            <td><strong>{ref}</strong></td>
+                            <td>{store_display}</td>
                             <td>{pc}</td>
-                            <td>{srv}</td>
-                            <td>{itm}</td>
+                            <td>{service_display}</td>
+                            <td>{status_display}</td>
                             <td>{track_html}</td>
                         </tr>
         """
@@ -157,10 +177,10 @@ left_col, right_col = st.columns([1, 2], gap="large")
 
 with left_col:
     st.subheader("1. Upload Export")
-    uploaded_file = st.file_uploader("Upload DHL End of Day Export (.csv or .xlsx)", type=["csv", "xlsx"])
+    uploaded_file = st.file_uploader("Upload DHL Dashboard Summary (.csv)", type=["csv", "xlsx"])
     
     if uploaded_file:
-        st.success("File loaded successfully.")
+        st.success("Dashboard Summary loaded successfully.")
 
 with right_col:
     st.subheader("2. Preview & Generate")
@@ -171,19 +191,15 @@ with right_col:
             else:
                 df = pd.read_excel(uploaded_file)
                 
-            # Clean column names
+            # Clean column names (strip trailing spaces which often happen in CSVs)
             df.columns = [str(c).strip() for c in df.columns]
             
-            # Find the Account Number column
-            acc_col = next((c for c in df.columns if 'account' in str(c).lower()), None)
-            
-            if not acc_col:
-                st.warning("Could not auto-detect the 'Account Number' column.")
-                acc_col = st.selectbox("Select the Account Number column:", df.columns)
-                
-            if acc_col:
+            # Use the exact column name 'Accounts'
+            if 'Accounts' not in df.columns:
+                st.error("Error: Could not find the 'Accounts' column in the uploaded file. Please ensure you are uploading the raw Dashboard Summary.")
+            else:
                 # Group by Account Number
-                accounts = df[acc_col].dropna().unique()
+                accounts = df['Accounts'].dropna().unique()
                 st.write(f"Detected **{len(accounts)}** distinct accounts in this export: {', '.join([str(a) for a in accounts])}")
                 
                 if st.button("Generate Branded HTML Reports"):
@@ -199,7 +215,7 @@ with right_col:
                             
                             for idx, account_id in enumerate(accounts):
                                 acc_str = str(account_id).strip()
-                                group_df = df[df[acc_col] == account_id]
+                                group_df = df[df['Accounts'] == account_id]
                                 
                                 # Generate the HTML string
                                 html_output = generate_branded_html(group_df, acc_str, today_str)
@@ -214,7 +230,7 @@ with right_col:
                                 # Render preview in the corresponding tab
                                 with tabs[idx]:
                                     st.write(f"**Previewing:** {file_name} ({len(group_df)} Shipments)")
-                                    components.html(html_output, height=500, scrolling=True)
+                                    components.html(html_output, height=600, scrolling=True)
 
                         st.success("✅ Tracking Dashboards Generated!")
                         st.download_button(
@@ -227,4 +243,4 @@ with right_col:
         except Exception as e:
             st.error(f"Error processing the file: {e}")
     else:
-        st.info("Upload the raw tracking spreadsheet to auto-generate your client-facing HTML dashboards.")
+        st.info("Upload the raw DHL Dashboard Summary to auto-generate your client-facing HTML dashboards.")
