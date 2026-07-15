@@ -13,9 +13,19 @@ st.markdown("""
     .stButton>button { background-color: #004B87; color: white; border-radius: 4px; font-weight: bold; padding: 10px; width: 100%; border: none; }
     .stButton>button:hover { background-color: #003666; color: white; }
     
-    /* Global Calendar Styling */
-    .cal-container { width: 100%; border-collapse: collapse; table-layout: fixed; margin-top: 10px; font-family: Arial, sans-serif; }
-    .cal-header { background-color: #f8f9fa; text-align: center; padding: 10px; font-weight: bold; border: 1px solid #ddd; color: #555; }
+    /* --- MOBILE RESPONSIVE WRAPPER --- */
+    .table-wrapper {
+        width: 100%;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch; /* Enables smooth swiping on iPhone */
+        margin-bottom: 20px;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    }
+    
+    /* Global Calendar Styling (Added min-width to stop mobile squishing) */
+    .cal-container { width: 100%; min-width: 800px; border-collapse: collapse; table-layout: fixed; margin-top: 0px; font-family: Arial, sans-serif; }
+    .cal-header { background-color: #f8f9fa; text-align: center; padding: 10px; font-weight: bold; border: 1px solid #ddd; color: #555; position: sticky; top: 0; z-index: 1; }
     .cal-cell { border: 1px solid #ddd; vertical-align: top; height: 120px; padding: 5px; background-color: #fff; }
     .cal-cell-empty { background-color: #f9f9f9; border: 1px solid #eee; }
     
@@ -92,7 +102,8 @@ with tab1:
         df['Date_Str_T1'] = df['Dispatch Date'].dt.strftime('%Y-%m-%d')
         cal_t1 = calendar.monthcalendar(selected_year_t1, selected_month_t1)
         
-        html_t1 = "<table class='cal-container'>"
+        # Wrapped the table in the new mobile-responsive div
+        html_t1 = "<div class='table-wrapper'><table class='cal-container'>"
         html_t1 += "<tr><th class='cal-header'>Mon</th><th class='cal-header'>Tue</th><th class='cal-header'>Wed</th><th class='cal-header'>Thu</th><th class='cal-header'>Fri</th><th class='cal-header'>Sat</th><th class='cal-header'>Sun</th></tr>"
         
         for week in cal_t1:
@@ -116,7 +127,7 @@ with tab1:
                         html_t1 += f"<div class='job-badge {b_class}' title='{job['Campaign Name']}'><b>{job['Client']}</b><br>{job['Campaign Name']}</div>"
                     html_t1 += "</td>"
             html_t1 += "</tr>"
-        html_t1 += "</table>"
+        html_t1 += "</table></div>" # Closed the wrapper here
         st.markdown(html_t1, unsafe_allow_html=True)
         
         st.divider()
@@ -203,7 +214,8 @@ with tab3:
         active_df['Date_Str'] = active_df['Dispatch Date'].dt.strftime('%Y-%m-%d')
         cal_t3 = calendar.monthcalendar(selected_year_t3, selected_month_t3)
         
-        html_t3 = "<table class='cal-container'>"
+        # Wrapped the capacity table for mobile swiping too
+        html_t3 = "<div class='table-wrapper'><table class='cal-container'>"
         html_t3 += "<tr><th class='cal-header'>Mon</th><th class='cal-header'>Tue</th><th class='cal-header'>Wed</th><th class='cal-header'>Thu</th><th class='cal-header'>Fri</th><th class='cal-header'>Sat</th><th class='cal-header'>Sun</th></tr>"
         
         for week in cal_t3:
@@ -224,7 +236,7 @@ with tab3:
                     for _, job in day_jobs.iterrows(): html_t3 += f"<div class='job-badge badge-default' title='{job['Campaign Name']}'><b>{job['Client']}</b><br>{job['Campaign Name']}</div>"
                     html_t3 += "</td>"
             html_t3 += "</tr>"
-        html_t3 += "</table>"
+        html_t3 += "</table></div>" # Closed the wrapper here
         st.markdown(html_t3, unsafe_allow_html=True)
 
 # ==========================================
