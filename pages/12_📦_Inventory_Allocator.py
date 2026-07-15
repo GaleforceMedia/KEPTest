@@ -11,13 +11,28 @@ st.markdown("""
     .metric-card { background-color: #f8f9fa; padding: 20px; border-radius: 8px; border: 1px solid #e0e0e0; text-align: center; }
     .stock-high { color: #27ae60; font-size: 28px; font-weight: bold; margin: 0; }
     .stock-low { color: #d9534f; font-size: 28px; font-weight: bold; margin: 0; }
-    .stButton>button { background-color: #004B87; color: white; border-radius: 4px; font-weight: bold; padding: 10px; width: 100%; border: none; }
+    .stButton>button { background-color: #004B87; color: white; border-radius: 4px; font-weight: bold; padding: 10px; width: 100%; border: none; font-size: 16px; }
     .stButton>button:hover { background-color: #003666; color: white; }
+    .success-banner { padding: 20px; background-color: #d1fae5; border: 2px solid #10b981; border-radius: 8px; color: #065f46; text-align: center; margin-bottom: 20px; }
     </style>
     """, unsafe_allow_html=True)
 
 st.title("📦 Live Inventory & Goods-In Allocator")
 st.write("Manage warehouse locations, track material specs, and allocate stock to KEP Jobs.")
+
+# --- SESSION STATE INITIALIZATION ---
+# This allows the app to "remember" that an action just happened even after the page reloads
+if 'action_feedback' not in st.session_state:
+    st.session_state.action_feedback = None
+
+# --- VISUAL FEEDBACK BANNER ---
+# If a button was clicked on the previous screen, display this massive banner now
+if st.session_state.action_feedback:
+    st.markdown(f"<div class='success-banner'><h2>{st.session_state.action_feedback}</h2></div>", unsafe_allow_html=True)
+    st.toast(st.session_state.action_feedback, icon="✅")
+    # Clear the message so it doesn't show up again on the next click
+    st.session_state.action_feedback = None
+
 st.divider()
 
 # --- DATABASE MANAGEMENT ---
@@ -26,15 +41,12 @@ DB_FILE = "live_inventory.csv"
 def load_inventory():
     if os.path.exists(DB_FILE):
         df = pd.read_csv(DB_FILE)
-        # Backwards compatibility: Add new columns to older CSVs if they don't exist
-        if 'Size' not in df.columns:
-            df.insert(2, 'Size', '')
-        if 'Thickness' not in df.columns:
-            df.insert(3, 'Thickness', '')
+        # Backwards compatibility
+        if 'Size' not in df.columns: df.insert(2, 'Size', '')
+        if 'Thickness' not in df.columns: df.insert(3, 'Thickness', '')
     else:
         df = pd.DataFrame(columns=["SKU", "Description", "Size", "Thickness", "Location", "Quantity", "Last Updated"])
     
-    # Ensure missing data is handled cleanly rather than showing 'NaN'
     df.fillna('', inplace=True)
     return df
 
@@ -71,7 +83,6 @@ with tab1:
         if in_sku and in_desc:
             now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
             
-            # Match by SKU, Size, Thickness, and Location to ensure we don't mix different specs
             match = (
                 (inventory_df['SKU'] == in_sku) & 
                 (inventory_df['Location'] == in_loc) &
@@ -82,7 +93,8 @@ with tab1:
             if match.any():
                 inventory_df.loc[match, 'Quantity'] += in_qty
                 inventory_df.loc[match, 'Last Updated'] = now
-                st.success(f"✅ Added {in_qty} sheets to existing stock in {in_loc}.")
+                # Save the success message to memory instead of printing it instantly
+                st.session_state.action_feedback = f"✅ SUCCESS: Added {in_qty} sheets to existing stock in {in_loc}."
             else:
                 new_row = pd.DataFrame({
                     "SKU": [in_sku], "Description": [in_desc], 
@@ -90,10 +102,10 @@ with tab1:
                     "Location": [in_loc], "Quantity": [in_qty], "Last Updated": [now]
                 })
                 inventory_df = pd.concat([inventory_df, new_row], ignore_index=True)
-                st.success(f"✅ New stock booked into {in_loc}.")
+                st.session_state.action_feedback = f"✅ SUCCESS: Booked {in_qty} sheets of NEW stock into {in_loc}."
                 
             save_inventory(inventory_df)
-            st.rerun()
+            st.rerun() # Reload the page to show the massive banner
         else:
             st.error("Please enter at least a SKU and Description.")
 
@@ -111,13 +123,11 @@ with tab2:
         col_out1, col_out2 = st.columns([2, 1])
         
         with col_out1:
-            # Dynamically build the display string based on what data is available
             def build_display_string(row):
                 spec_parts = []
                 if row.get('Size'): spec_parts.append(str(row['Size']))
                 if row.get('Thickness'): spec_parts.append(str(row['Thickness']))
                 spec_str = f" ({', '.join(spec_parts)})" if spec_parts else ""
-                
                 return f"{row['SKU']} - {row['Description']}{spec_str} | Loc: {row['Location']} (Current: {row['Quantity']})"
 
             options = available_stock.apply(build_display_string, axis=1).tolist()
@@ -140,8 +150,10 @@ with tab2:
                     inventory_df.at[real_index, 'Last Updated'] = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
                     
                     save_inventory(inventory_df)
-                    st.success(f"✅ Allocated {out_qty} sheets to Job {job_no}. Remaining stock updated.")
-                    st.rerun()
+                    
+                    # Save the success message to memory
+                    st.session_state.action_feedback = f"✅ SUCCESS: Allocated {out_qty} sheets to KEP Job {job_no}."
+                    st.rerun() # Reload the page to show the massive banner
                 else:
                     st.error("You must enter a Job Number to track where this material went.")
 
