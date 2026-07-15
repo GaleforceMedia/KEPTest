@@ -40,17 +40,21 @@ def generate_pick_list_html(store_data, campaign_name):
         .header h2 {{ margin: 5px 0 0 0; font-size: 18px; font-weight: normal; color: #555; }}
         .header-meta {{ text-align: right; font-size: 14px; font-weight: bold; }}
         
-        .pick-table {{ width: 100%; border-collapse: collapse; margin-bottom: 40px; font-size: 16px; }}
+        .pick-table {{ width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 16px; }}
         .pick-table th, .pick-table td {{ border: 1px solid #000; padding: 12px; text-align: left; }}
         .pick-table th {{ background-color: #f2f2f2; font-weight: bold; text-transform: uppercase; }}
-        .pick-table td.qty-col {{ text-align: center; font-size: 20px; font-weight: bold; width: 100px; }}
-        .pick-table td.check-col {{ width: 80px; text-align: center; }}
-        .checkbox {{ width: 25px; height: 25px; border: 2px solid #000; display: inline-block; }}
+        .pick-table td.qty-col {{ text-align: center; font-size: 20px; font-weight: bold; width: 120px; }}
+        
+        /* GREY OUT LOGIC FOR ZERO PICKS */
+        .grey-row td {{ background-color: #f5f5f5; color: #999; }}
+        .grey-row td.qty-col {{ color: #ccc; }}
         
         @media print {{
             .no-print {{ display: none !important; }}
             body {{ padding: 0; }}
             @page {{ margin: 1cm; }}
+            /* Ensure background colors print for the greyed out rows */
+            * {{ -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }}
         }}
     </style>
     </head>
@@ -83,30 +87,25 @@ def generate_pick_list_html(store_data, campaign_name):
                         <th>Item Description</th>
                         <th>Version / Allocation</th>
                         <th>Pick Qty</th>
-                        <th>Packed</th>
                     </tr>
                 </thead>
                 <tbody>
         """
         for pick in store['Picks']:
+            # Apply the grey-row class if the quantity is 0
+            row_class = "grey-row" if pick['Qty'] == 0 else ""
+            
             html += f"""
-                    <tr>
+                    <tr class="{row_class}">
                         <td><strong>{pick['Item']}</strong></td>
                         <td>{pick['Version']}</td>
                         <td class="qty-col">{pick['Qty']}</td>
-                        <td class="check-col"><div class="checkbox"></div></td>
                     </tr>
             """
             
         html += """
                 </tbody>
             </table>
-            
-            <div style="margin-top: 50px; font-size: 14px; display: flex; justify-content: space-between;">
-                <div>Picked By: ___________________________</div>
-                <div>Packed By: ___________________________</div>
-                <div>Box Count: ______</div>
-            </div>
         </div>
         """
     html += "</body></html>"
@@ -126,16 +125,13 @@ with col_summary:
     
     if uploaded_file:
         try:
-            # Load the Excel file to get sheet names
             xls = pd.ExcelFile(uploaded_file)
             sheet_choice = st.selectbox("Select Sheet to Process", xls.sheet_names)
             
             if st.button("Generate Printable Pick Lists"):
-                # Load the raw sheet without assuming ANY headers
                 raw_df = pd.read_excel(uploaded_file, sheet_name=sheet_choice, header=None)
                 
                 # --- THE GRID HUNTER ---
-                # We physically scan the spreadsheet to find the exact coordinates of our target columns
                 site_col = -1
                 postcode_col = -1
                 item_header_row = -1
@@ -150,20 +146,16 @@ with col_summary:
                         elif val_str == 'postcode':
                             postcode_col = c_idx
                         elif val_str == 'qty' and item_header_row == -1:
-                            # We found the first QTY! This tells us exactly where the items start
                             item_header_row = r_idx
                             first_qty_col = c_idx
 
-                # Safety fallbacks just in case the marketing team misspelled a column header
                 if site_col == -1: site_col = 1
                 if postcode_col == -1: postcode_col = 7
                 
-                # Set our starting points based on what the hunter found
                 if item_header_row != -1 and first_qty_col != -1:
-                    start_col_idx = first_qty_col - 1 # Items always start one column left of the first QTY
-                    data_start_row = item_header_row + 1 # Data always starts the row below the headers
+                    start_col_idx = first_qty_col - 1
+                    data_start_row = item_header_row + 1
                 else:
-                    # Absolute fallback if QTY isn't found
                     item_header_row = 2 
                     start_col_idx = 8
                     data_start_row = 3
@@ -178,51 +170,50 @@ with col_summary:
                     site_name = str(row.iloc[site_col]).strip()
                     postcode_val = str(row.iloc[postcode_col]).strip()
                     
-                    # Skip completely empty rows
                     if pd.isna(site_name) or site_name.lower() == 'nan' or site_name == '':
                         continue
                         
                     picks = []
+                    store_active_qty = 0 # Track if this specific store actually gets a box at all
                     
-                    # Step across the columns in pairs of 2
                     for col_i in range(start_col_idx, len(raw_df.columns), 2):
                         if col_i + 1 < len(raw_df.columns):
-                            # Grab the item name from the header row
                             item_name = str(raw_df.iloc[item_header_row, col_i]).strip()
                             
-                            # If it's not "QTY" and not blank, it's a valid product!
                             if item_name.upper() != 'QTY' and item_name.lower() != 'nan' and item_name != '':
                                 version = str(row.iloc[col_i]).strip()
-                                qty = str(row.iloc[col_i + 1]).strip()
+                                qty_raw = str(row.iloc[col_i + 1]).strip()
                                 
-                                # Ignore the 'X' markers and empty cells
-                                if version.upper() != 'X' and version.lower() != 'nan' and version != '':
-                                    if qty.upper() != 'X' and qty.lower() != 'nan' and qty != '' and qty != '0' and qty != '0.0':
+                                clean_qty = 0
+                                display_version = version
+                                
+                                # Process the quantity
+                                if qty_raw.upper() not in ['X', 'NAN', '']:
+                                    try:
+                                        clean_qty = int(float(qty_raw))
+                                    except ValueError:
+                                        clean_qty = 0
+                                
+                                # If quantity is 0 or invalid, standardise the version text
+                                if clean_qty == 0 or version.upper() in ['X', 'NAN', '']:
+                                    display_version = "N/A"
                                         
-                                        # Clean up the quantity format
-                                        try:
-                                            clean_qty = int(float(qty))
-                                        except ValueError:
-                                            clean_qty = qty
-                                            
-                                        picks.append({
-                                            'Item': item_name,
-                                            'Version': version,
-                                            'Qty': clean_qty
-                                        })
-                                        
-                                        try:
-                                            total_items_picked += int(float(qty))
-                                        except:
-                                            pass
+                                picks.append({
+                                    'Item': item_name,
+                                    'Version': display_version,
+                                    'Qty': clean_qty
+                                })
+                                
+                                store_active_qty += clean_qty
                     
-                    # Only add the store to the print run if they actually have active picks
-                    if picks:
+                    # Only add the store to the print run if they have AT LEAST 1 item to pack
+                    if picks and store_active_qty > 0:
                         processed_stores.append({
                             'Site': site_name,
                             'Postcode': postcode_val,
                             'Picks': picks
                         })
+                        total_items_picked += store_active_qty
                 
                 # --- DISPLAY ---
                 if processed_stores:
