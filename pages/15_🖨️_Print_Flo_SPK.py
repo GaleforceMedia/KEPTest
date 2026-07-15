@@ -144,7 +144,8 @@ with col_summary:
             # Find the row index that contains 'New Site Name' or 'Postcode'
             header_idx = 0
             for idx, row in raw_df.iterrows():
-                row_str = " ".join(row.astype(str).tolist()).lower()
+                # FIX: Bulletproof list comprehension that forces EVERY cell to be a string before joining
+                row_str = " ".join([str(val) for val in row.values]).lower()
                 if 'new site name' in row_str or 'postcode' in row_str:
                     header_idx = idx
                     break
@@ -193,7 +194,8 @@ with col_summary:
                                     'Qty': qty
                                 })
                                 try:
-                                    total_items_picked += int(qty)
+                                    # Added an extra float conversion layer just in case quantities are logged as '100.0'
+                                    total_items_picked += int(float(qty))
                                 except:
                                     pass
                 
