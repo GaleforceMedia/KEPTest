@@ -1,28 +1,49 @@
 import streamlit as st
 import pandas as pd
 import datetime
+import os
+import base64
 import streamlit.components.v1 as components
 
-st.set_page_config(page_title="Purchase Requisition", page_icon="📝", layout="wide")
+st.set_page_config(page_title="Purchase Requisition", page_icon="📝", layout="centered")
 
-# --- UI STYLING ---
-st.markdown("""
-    <style>
-    .metric-card { background-color: #f8f9fa; padding: 20px; border-radius: 8px; border: 1px solid #e0e0e0; text-align: center; }
-    .price-text { color: #004B87; font-size: 32px; font-weight: bold; margin: 0; }
-    .stButton>button { background-color: #004B87; color: white; border-radius: 4px; font-weight: bold; padding: 10px; width: 100%; border: none; }
-    .stButton>button:hover { background-color: #003666; color: white; }
-    </style>
-    """, unsafe_allow_html=True)
+# --- HELPER: BASE64 IMAGE ENCODER ---
+@st.cache_data
+def get_base64_image(filepath):
+    if os.path.exists(filepath):
+        with open(filepath, "rb") as img_file:
+            encoded = base64.b64encode(img_file.read()).decode()
+            ext = filepath.split('.')[-1].lower()
+            mime = "image/svg+xml" if ext == "svg" else f"image/{ext}"
+            return f"data:{mime};base64,{encoded}"
+    return None
 
-st.title("📝 Purchase Order Requisition Generator")
-st.write("Search the master price list and instantly generate a formatted KEP POR Form for the production team.")
-st.divider()
+# --- DATA LOADER (CACHED FOR SPEED) ---
+@st.cache_data
+def load_price_list():
+    filepath = "KEP OCT 2025.xlsx"
+    if os.path.exists(filepath):
+        try:
+            df = pd.read_excel(filepath)
+            df.columns = [str(c).strip() for c in df.columns]
+            return df
+        except Exception as e:
+            st.error(f"Error reading the Excel file: {e}")
+            return pd.DataFrame()
+    else:
+        st.error(f"Database missing: Could not find '{filepath}' in the repository.")
+        return pd.DataFrame()
 
 # --- HELPER: HTML POR FORM GENERATOR ---
-def generate_por_html(date_str, requester, job_no, qty, product_desc, supplier, unit_cost):
+def generate_por_html(date_str, requester, job_no, qty, product_desc, supplier, unit_cost, logo_b64):
     total_cost = float(qty) * float(unit_cost)
     
+    # Use the KEP logo if available, otherwise fallback to text
+    if logo_b64:
+        header_visual = f"<img src='{logo_b64}' alt='KEP Logo' style='max-height: 70px; margin-bottom: 10px;'>"
+    else:
+        header_visual = "<h1>KEP PRINT GROUP</h1>"
+
     html = f"""
     <!DOCTYPE html>
     <html>
@@ -60,8 +81,7 @@ def generate_por_html(date_str, requester, job_no, qty, product_desc, supplier, 
         </div>
 
         <div class="header">
-            <h1>KEP</h1>
-            <h1 style="font-size: 24px;">PRINT GROUP</h1>
+            {header_visual}
             <h2>Purchase Order Requisition Form</h2>
         </div>
 
@@ -110,100 +130,95 @@ def generate_por_html(date_str, requester, job_no, qty, product_desc, supplier, 
     """
     return html
 
+# --- UI STYLING ---
+st.markdown("""
+    <style>
+    .metric-card { background-color: #f8f9fa; padding: 20px; border-radius: 8px; border: 1px solid #e0e0e0; text-align: center; margin-top: 20px; margin-bottom: 20px;}
+    .price-text { color: #004B87; font-size: 32px; font-weight: bold; margin: 0; }
+    .stButton>button { background-color: #004B87; color: white; border-radius: 4px; font-weight: bold; padding: 12px; width: 100%; border: none; font-size: 16px;}
+    .stButton>button:hover { background-color: #003666; color: white; }
+    </style>
+    """, unsafe_allow_html=True)
 
-# --- INTERFACE ---
-col_left, col_right = st.columns([1, 2], gap="large")
+# --- HEADER APP LOGO ---
+logo_b64 = get_base64_image("keplogo.svg")
+if logo_b64:
+    st.markdown(f"<div style='text-align: center; margin-bottom: 20px;'><img src='{logo_b64}' width='250'></div>", unsafe_allow_html=True)
+else:
+    st.title("📝 Purchase Requisition")
 
-with col_left:
-    st.subheader("1. Upload Price Database")
-    uploaded_file = st.file_uploader("Upload your Master Costings (CSV)", type=["csv", "xlsx"])
+st.markdown("<h3 style='text-align: center; color: #555;'>Material Requisition Generator</h3>", unsafe_allow_html=True)
+st.divider()
+
+# Load the data quietly in the background
+df = load_price_list()
+
+if not df.empty:
+    # 1. Search Bar
+    search_query = st.text_input("🔍 Search Material Database (e.g., '5mm foamex', 'XLD20565')", placeholder="Start typing to search...")
     
-    if uploaded_file:
-        st.success("Database loaded. Ready to search.")
-
-with col_right:
-    st.subheader("2. Requisition Builder")
-    
-    if uploaded_file:
-        try:
-            # Load the CSV
-            if uploaded_file.name.endswith('.csv'):
-                df = pd.read_csv(uploaded_file)
-            else:
-                df = pd.read_excel(uploaded_file)
-                
-            df.columns = [str(c).strip() for c in df.columns]
+    if search_query:
+        # Combine description columns for a better search
+        desc1 = df.get('Description', pd.Series(dtype='str')).fillna('')
+        desc2 = df.get('Description 2', pd.Series(dtype='str')).fillna('')
+        item_no = df.get('Item No.', pd.Series(dtype='str')).fillna('')
+        
+        df['Search_Field'] = item_no + " " + desc1 + " " + desc2
+        
+        # Filter the dataframe
+        filtered_df = df[df['Search_Field'].str.lower().str.contains(search_query.lower())]
+        
+        if not filtered_df.empty:
+            # Create a clean dropdown list
+            options = filtered_df.apply(
+                lambda row: f"{row.get('Item No.', '')} | {row.get('Description', '')} {row.get('Description 2', '')} | £{row.get('Unit Price', 0)}", 
+                axis=1
+            ).tolist()
             
-            # 1. Search Bar
-            search_query = st.text_input("🔍 Search Material (e.g., '5mm foamex', 'XLD20565')")
+            selected_option = st.selectbox("Select the exact sheet size and spec:", options)
             
-            if search_query:
-                # Combine description columns for a better search
-                desc1 = df.get('Description', pd.Series(dtype='str')).fillna('')
-                desc2 = df.get('Description 2', pd.Series(dtype='str')).fillna('')
-                item_no = df.get('Item No.', pd.Series(dtype='str')).fillna('')
-                
-                df['Search_Field'] = item_no + " " + desc1 + " " + desc2
-                
-                # Filter the dataframe based on the user's query
-                filtered_df = df[df['Search_Field'].str.lower().str.contains(search_query.lower())]
-                
-                if not filtered_df.empty:
-                    # Create a clean dropdown list for the user to select the exact sheet
-                    options = filtered_df.apply(
-                        lambda row: f"{row.get('Item No.', '')} | {row.get('Description', '')} {row.get('Description 2', '')} | £{row.get('Unit Price', 0)}", 
-                        axis=1
-                    ).tolist()
-                    
-                    selected_option = st.selectbox("Select the exact sheet size and spec:", options)
-                    
-                    # Get the data for the selected row
-                    selected_idx = options.index(selected_option)
-                    selected_row = filtered_df.iloc[selected_idx]
-                    
-                    st.divider()
-                    
-                    # 2. Requisition Details Form
-                    st.write("**Job Details**")
-                    col_a, col_b, col_c = st.columns(3)
-                    with col_a:
-                        job_no = st.text_input("KEP Job Number", placeholder="e.g. 353319")
-                    with col_b:
-                        qty = st.number_input("Quantity of Sheets", min_value=1, value=1)
-                    with col_c:
-                        supplier = st.text_input("Supplier", value="Pyramid Display")
-                    
-                    # Calculations
-                    unit_price = float(selected_row.get('Unit Price', 0))
-                    total_cost = qty * unit_price
-                    
-                    st.markdown(f"<div class='metric-card'><h4>Total Material Cost</h4><p class='price-text'>£{total_cost:,.2f}</p></div>", unsafe_allow_html=True)
-                    
-                    # 3. Generate the POR Form
-                    if st.button("Generate POR Form (Printable)"):
-                        if not job_no:
-                            st.error("Please enter a Job Number before generating.")
-                        else:
-                            today_str = datetime.datetime.now().strftime("%d/%m/%Y")
-                            product_string = f"{selected_row.get('Item No.', '')} - {selected_row.get('Description', '')} {selected_row.get('Description 2', '')}"
-                            
-                            html_output = generate_por_html(
-                                date_str=today_str,
-                                requester="Matt Gale",
-                                job_no=job_no,
-                                qty=qty,
-                                product_desc=product_string,
-                                supplier=supplier,
-                                unit_cost=unit_price
-                            )
-                            
-                            st.success("✅ Form Generated! Scroll down to preview and print.")
-                            st.components.v1.html(html_output, height=800, scrolling=True)
-
+            selected_idx = options.index(selected_option)
+            selected_row = filtered_df.iloc[selected_idx]
+            
+            st.divider()
+            
+            # 2. Requisition Details Form
+            st.markdown("#### Job Details")
+            col_a, col_b, col_c = st.columns(3)
+            with col_a:
+                job_no = st.text_input("KEP Job Number", placeholder="e.g. 353319")
+            with col_b:
+                qty = st.number_input("Quantity of Sheets", min_value=1, value=1)
+            with col_c:
+                supplier = st.text_input("Supplier", value="Pyramid Display")
+            
+            # Calculations
+            unit_price = float(selected_row.get('Unit Price', 0))
+            total_cost = qty * unit_price
+            
+            st.markdown(f"<div class='metric-card'><h4>Total Material Cost</h4><p class='price-text'>£{total_cost:,.2f}</p></div>", unsafe_allow_html=True)
+            
+            # 3. Generate the POR Form
+            if st.button("Generate POR Form (Printable)"):
+                if not job_no:
+                    st.error("Please enter a Job Number before generating.")
                 else:
-                    st.warning("No materials found matching that search. Check spelling or try a broader term.")
+                    today_str = datetime.datetime.now().strftime("%d/%m/%Y")
+                    product_string = f"{selected_row.get('Item No.', '')} - {selected_row.get('Description', '')} {selected_row.get('Description 2', '')}"
                     
-        except Exception as e:
-            st.error(f"Error reading the database: {e}")
-    else:
-        st.info("👈 Please upload your KEP Sales Prices CSV on the left to begin.")
+                    html_output = generate_por_html(
+                        date_str=today_str,
+                        requester="Matt Gale",
+                        job_no=job_no,
+                        qty=qty,
+                        product_desc=product_string,
+                        supplier=supplier,
+                        unit_cost=unit_price,
+                        logo_b64=logo_b64
+                    )
+                    
+                    st.success("✅ Form Generated! Scroll down to preview and print.")
+                    st.components.v1.html(html_output, height=800, scrolling=True)
+
+        else:
+            st.warning("No materials found matching that search. Check spelling or try a broader term.")
