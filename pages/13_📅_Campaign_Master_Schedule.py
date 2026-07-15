@@ -9,10 +9,33 @@ st.set_page_config(page_title="Campaign Schedule", page_icon="📅", layout="wid
 # --- UI STYLING ---
 st.markdown("""
     <style>
+    /* General Metrics */
     .metric-card { background-color: #f8f9fa; padding: 20px; border-radius: 8px; border: 1px solid #e0e0e0; text-align: center; }
+    
+    /* Buttons */
     .stButton>button { background-color: #004B87; color: white; border-radius: 4px; font-weight: bold; padding: 10px; width: 100%; border: none; }
     .stButton>button:hover { background-color: #003666; color: white; }
     
+    /* Kanban Board Styling */
+    .kanban-container { display: flex; gap: 15px; width: 100%; margin-bottom: 30px; font-family: Arial, sans-serif; }
+    .kanban-col { flex: 1; background-color: #f4f5f7; border-radius: 8px; padding: 10px; min-height: 300px; border: 1px solid #e2e4e6; }
+    .kanban-header { font-weight: bold; text-align: center; padding: 8px; margin-bottom: 15px; border-radius: 5px; color: #333; font-size: 14px; text-transform: uppercase; letter-spacing: 1px;}
+    .kanban-card { background-color: #fff; border-radius: 6px; padding: 12px; margin-bottom: 10px; box-shadow: 0 1px 3px rgba(0,0,0,0.12); border-left: 4px solid #ccc; position: relative; }
+    .kanban-card h4 { margin: 0 0 5px 0; font-size: 14px; color: #172b4d; }
+    .kanban-card p { margin: 0; font-size: 12px; color: #5e6c84; }
+    .kanban-date { position: absolute; top: 12px; right: 12px; font-size: 11px; font-weight: bold; padding: 2px 6px; border-radius: 10px; background: #ebecf0; color: #172b4d; }
+    
+    /* Specific Kanban Column Colors */
+    .hdr-artwork { background-color: #fee2e2; color: #991b1b; }
+    .hdr-prod { background-color: #ffedd5; color: #c2410c; }
+    .hdr-collate { background-color: #fef08a; color: #854d0e; }
+    .hdr-dispatch { background-color: #d1fae5; color: #065f46; }
+    
+    .card-artwork { border-left-color: #ef4444; }
+    .card-prod { border-left-color: #f97316; }
+    .card-collate { border-left-color: #eab308; }
+    .card-dispatch { border-left-color: #22c55e; }
+
     /* Calendar Styling */
     .cal-container { width: 100%; border-collapse: collapse; table-layout: fixed; margin-top: 20px; font-family: Arial, sans-serif; }
     .cal-header { background-color: #f8f9fa; text-align: center; padding: 10px; font-weight: bold; border: 1px solid #ddd; color: #555; }
@@ -20,12 +43,10 @@ st.markdown("""
     .cal-cell-empty { background-color: #f9f9f9; border: 1px solid #eee; }
     .cal-date-header { font-weight: bold; font-size: 14px; padding: 4px; border-radius: 4px; display: flex; justify-content: space-between; margin-bottom: 5px; }
     
-    /* Capacity Colors */
-    .cap-safe { background-color: #d1fae5; color: #065f46; } /* Green */
-    .cap-warn { background-color: #fef08a; color: #854d0e; } /* Yellow */
-    .cap-clash { background-color: #fee2e2; color: #991b1b; border: 1px solid #ef4444; } /* Red */
+    .cap-safe { background-color: #d1fae5; color: #065f46; } 
+    .cap-warn { background-color: #fef08a; color: #854d0e; } 
+    .cap-clash { background-color: #fee2e2; color: #991b1b; border: 1px solid #ef4444; } 
     
-    /* Job Badges inside Calendar */
     .job-badge { background-color: #e0f2fe; border-left: 3px solid #0284c7; font-size: 11px; padding: 4px; margin-bottom: 4px; border-radius: 3px; color: #0369a1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.2; }
     </style>
     """, unsafe_allow_html=True)
@@ -36,16 +57,13 @@ st.write("Live dispatch tracker, interactive capacity calendar, and file vault."
 # --- DATABASE MANAGEMENT ---
 DB_FILE = "campaign_database.csv"
 UPLOAD_DIR = "campaign_files"
-MAX_DAILY_HOURS = 16.0 # KEP's daily collation limit
+MAX_DAILY_HOURS = 16.0 
 
-if not os.path.exists(UPLOAD_DIR):
-    os.makedirs(UPLOAD_DIR)
+if not os.path.exists(UPLOAD_DIR): os.makedirs(UPLOAD_DIR)
 
 def load_db():
-    if os.path.exists(DB_FILE):
-        df = pd.read_csv(DB_FILE)
-    else:
-        df = pd.DataFrame(columns=["ID", "Client", "Campaign Name", "AM", "Dispatch Date", "Stores (Qty)", "Collation (Hrs)", "Status", "Notes"])
+    if os.path.exists(DB_FILE): df = pd.read_csv(DB_FILE)
+    else: df = pd.DataFrame(columns=["ID", "Client", "Campaign Name", "AM", "Dispatch Date", "Stores (Qty)", "Collation (Hrs)", "Status", "Notes"])
     df['Dispatch Date'] = pd.to_datetime(df['Dispatch Date'], errors='coerce')
     return df
 
@@ -57,7 +75,7 @@ df = load_db()
 
 # --- APP TABS ---
 tab1, tab2, tab3, tab4, tab5 = st.tabs([
-    "📋 Live Tracker", 
+    "📋 Live Tracker (Kanban)", 
     "➕ Add Campaign", 
     "🗓️ Visual Capacity Calendar", 
     "📁 File Vault",
@@ -65,15 +83,52 @@ tab1, tab2, tab3, tab4, tab5 = st.tabs([
 ])
 
 # ==========================================
-# TAB 1: LIVE TRACKER (INTERACTIVE)
+# TAB 1: LIVE TRACKER (KANBAN + EDITOR)
 # ==========================================
 with tab1:
-    st.subheader("Interactive Dispatch Board")
-    st.write("Double-click any cell to edit. The board automatically saves.")
+    st.subheader("Visual Production Board")
     
     if df.empty:
         st.info("No campaigns active. Go to 'Add Campaign' or 'Import Legacy Data' to start.")
     else:
+        # 1. Generate the HTML Kanban Board
+        k_html = "<div class='kanban-container'>"
+        
+        stages = [
+            ("🔴 Awaiting Artwork", "hdr-artwork", "card-artwork"),
+            ("🟠 In Production", "hdr-prod", "card-prod"),
+            ("🟡 Picking/Collation", "hdr-collate", "card-collate"),
+            ("🟢 Dispatched", "hdr-dispatch", "card-dispatch")
+        ]
+        
+        for stage_name, hdr_class, card_class in stages:
+            k_html += f"<div class='kanban-col'>"
+            k_html += f"<div class='kanban-header {hdr_class}'>{stage_name.split(' ', 1)[1]}</div>"
+            
+            # Filter jobs for this stage and sort by date
+            stage_jobs = df[df['Status'] == stage_name].sort_values(by="Dispatch Date")
+            
+            for _, job in stage_jobs.iterrows():
+                date_str = job['Dispatch Date'].strftime('%d %b') if pd.notnull(job['Dispatch Date']) else "TBC"
+                k_html += f"""
+                <div class='kanban-card {card_class}'>
+                    <div class='kanban-date'>{date_str}</div>
+                    <h4>{job['Client']}</h4>
+                    <p>{job['Campaign Name']}</p>
+                    <p style="margin-top: 6px; font-size: 10px;">📦 {job['Stores (Qty)']} Stores | ⏱️ {job['Collation (Hrs)']}h</p>
+                </div>
+                """
+            k_html += "</div>"
+        
+        k_html += "</div>"
+        st.markdown(k_html, unsafe_allow_html=True)
+        
+        st.divider()
+        
+        # 2. Interactive Data Editor (For making changes)
+        st.subheader("Edit Master Data")
+        st.write("Double-click any cell below to change dates or update the status. The Kanban board above will update instantly.")
+        
         display_df = df.sort_values(by="Dispatch Date", ascending=True).reset_index(drop=True)
         display_df['Dispatch Date'] = display_df['Dispatch Date'].dt.date
         
@@ -81,9 +136,10 @@ with tab1:
             display_df,
             column_config={
                 "ID": st.column_config.TextColumn("ID", disabled=True),
-                "Dispatch Date": st.column_config.DateColumn("Dispatch Date", format="YYYY-MM-DD", required=True),
+                "Dispatch Date": st.column_config.DateColumn("Dispatch Date", format="DD/MM/YYYY", required=True),
                 "Status": st.column_config.SelectboxColumn("Status", options=["🔴 Awaiting Artwork", "🟠 In Production", "🟡 Picking/Collation", "🟢 Dispatched"], required=True),
-                "Collation (Hrs)": st.column_config.NumberColumn("Collation (Hrs)", min_value=0, format="%d")
+                "Collation (Hrs)": st.column_config.NumberColumn("Collation (Hrs)", min_value=0, format="%d"),
+                "Stores (Qty)": st.column_config.NumberColumn("Stores (Qty)", min_value=0, format="%d")
             },
             use_container_width=True, hide_index=True, num_rows="dynamic"
         )
@@ -99,6 +155,7 @@ with tab1:
 # ==========================================
 with tab2:
     st.subheader("Log a New Campaign")
+    st.markdown("<div style='background-color: #f8f9fa; padding: 20px; border-radius: 8px; border: 1px solid #e0e0e0;'>", unsafe_allow_html=True)
     with st.form("new_campaign_form", clear_on_submit=True):
         col1, col2, col3 = st.columns(3)
         with col1:
@@ -123,6 +180,7 @@ with tab2:
                 st.rerun()
             else:
                 st.error("Client and Campaign required.")
+    st.markdown("</div>", unsafe_allow_html=True)
 
 # ==========================================
 # TAB 3: VISUAL CAPACITY CALENDAR
@@ -131,24 +189,18 @@ with tab3:
     st.subheader("🗓️ Production Calendar")
     st.write(f"Visually maps daily dispatch load. Days exceeding the **{MAX_DAILY_HOURS}-hour capacity limit** will turn red.")
     
-    # Filter active campaigns
     active_df = df[df["Status"] != "🟢 Dispatched"].copy()
     
     if active_df.empty:
         st.info("No active campaigns to display.")
     else:
-        # Date selection for the calendar view
         col_m, col_y, _ = st.columns([1, 1, 3])
-        with col_m:
-            selected_month = st.selectbox("Month", range(1, 13), index=datetime.datetime.now().month - 1, format_func=lambda x: calendar.month_name[x])
+        with col_m: selected_month = st.selectbox("Month", range(1, 13), index=datetime.datetime.now().month - 1, format_func=lambda x: calendar.month_name[x])
         with col_y:
             current_year = datetime.datetime.now().year
             selected_year = st.selectbox("Year", range(current_year - 1, current_year + 3), index=1)
             
-        # Group active data by exact date
         active_df['Date_Str'] = active_df['Dispatch Date'].dt.strftime('%Y-%m-%d')
-        
-        # HTML Calendar Generation
         cal = calendar.monthcalendar(selected_year, selected_month)
         
         html = "<table class='cal-container'>"
@@ -157,40 +209,22 @@ with tab3:
         for week in cal:
             html += "<tr>"
             for day in week:
-                if day == 0:
-                    html += "<td class='cal-cell-empty'></td>"
+                if day == 0: html += "<td class='cal-cell-empty'></td>"
                 else:
                     date_str = f"{selected_year}-{selected_month:02d}-{day:02d}"
                     day_jobs = active_df[active_df['Date_Str'] == date_str]
-                    
                     total_hours = day_jobs['Collation (Hrs)'].sum()
                     
-                    # Determine Cell Header Color
-                    if total_hours == 0:
-                        header_class = "cap-safe"
-                        hours_text = ""
-                    elif total_hours <= MAX_DAILY_HOURS * 0.8:
-                        header_class = "cap-safe"
-                        hours_text = f"{total_hours}h"
-                    elif total_hours <= MAX_DAILY_HOURS:
-                        header_class = "cap-warn"
-                        hours_text = f"{total_hours}h"
-                    else:
-                        header_class = "cap-clash"
-                        hours_text = f"🚨 {total_hours}h"
+                    if total_hours == 0: header_class, hours_text = "cap-safe", ""
+                    elif total_hours <= MAX_DAILY_HOURS * 0.8: header_class, hours_text = "cap-safe", f"{total_hours}h"
+                    elif total_hours <= MAX_DAILY_HOURS: header_class, hours_text = "cap-warn", f"{total_hours}h"
+                    else: header_class, hours_text = "cap-clash", f"🚨 {total_hours}h"
                     
-                    # Build the cell
-                    html += f"<td class='cal-cell'>"
-                    html += f"<div class='cal-date-header {header_class}'><span>{day}</span><span>{hours_text}</span></div>"
-                    
-                    # List the jobs inside the cell
-                    for _, job in day_jobs.iterrows():
-                        html += f"<div class='job-badge' title='{job['Campaign Name']}'><b>{job['Client']}</b><br>{job['Campaign Name']}</div>"
-                        
+                    html += f"<td class='cal-cell'><div class='cal-date-header {header_class}'><span>{day}</span><span>{hours_text}</span></div>"
+                    for _, job in day_jobs.iterrows(): html += f"<div class='job-badge' title='{job['Campaign Name']}'><b>{job['Client']}</b><br>{job['Campaign Name']}</div>"
                     html += "</td>"
             html += "</tr>"
         html += "</table>"
-        
         st.markdown(html, unsafe_allow_html=True)
 
 # ==========================================
