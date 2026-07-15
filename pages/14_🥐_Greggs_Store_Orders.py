@@ -60,6 +60,9 @@ def load_db():
     return pd.DataFrame(columns=["Order ID", "Store Number", "Requested By", "Dispatch Date", "Order Details", "Status"])
 
 def save_db(df):
+    # Force the column to be a datetime object to prevent the .dt accessor error
+    df['Dispatch Date'] = pd.to_datetime(df['Dispatch Date'], errors='coerce')
+    # Now it is safe to format it for the CSV
     df['Dispatch Date'] = df['Dispatch Date'].dt.strftime('%Y-%m-%d')
     df.to_csv(DB_FILE, index=False)
 
