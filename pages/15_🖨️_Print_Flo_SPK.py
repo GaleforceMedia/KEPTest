@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 import datetime
-import io
 
 st.set_page_config(page_title="Print Flo SPK Picks", page_icon="🖨️", layout="wide")
 
@@ -40,10 +39,6 @@ def generate_pick_list_html(store_data, campaign_name):
         .header h1 {{ margin: 0; font-size: 28px; font-weight: 900; }}
         .header h2 {{ margin: 5px 0 0 0; font-size: 18px; font-weight: normal; color: #555; }}
         .header-meta {{ text-align: right; font-size: 14px; font-weight: bold; }}
-        
-        .meta-table {{ width: 100%; margin-bottom: 30px; font-size: 16px; }}
-        .meta-table td {{ padding: 8px 0; }}
-        .meta-table .label {{ font-weight: bold; width: 150px; }}
         
         .pick-table {{ width: 100%; border-collapse: collapse; margin-bottom: 40px; font-size: 16px; }}
         .pick-table th, .pick-table td {{ border: 1px solid #000; padding: 12px; text-align: left; }}
@@ -93,7 +88,6 @@ def generate_pick_list_html(store_data, campaign_name):
                 </thead>
                 <tbody>
         """
-        
         for pick in store['Picks']:
             html += f"""
                     <tr>
@@ -115,19 +109,16 @@ def generate_pick_list_html(store_data, campaign_name):
             </div>
         </div>
         """
-        
-    html += """
-    </body>
-    </html>
-    """
+    html += "</body></html>"
     return html
+
 
 # --- INTERFACE ---
 col_upload, col_summary = st.columns([1, 2], gap="large")
 
 with col_upload:
     st.subheader("1. Upload Matrix")
-    uploaded_file = st.file_uploader("Upload Drop Matrix (CSV or Excel)", type=["csv", "xlsx"])
+    uploaded_file = st.file_uploader("Upload Drop Matrix (Excel)", type=["xlsx", "xls"])
     campaign_name = st.text_input("Campaign Name (For header)", value="Stonegate Phase 1")
 
 with col_summary:
@@ -135,97 +126,121 @@ with col_summary:
     
     if uploaded_file:
         try:
-            # 1. Read the raw file to find the actual header row (ignoring marketing's top notes)
-            if uploaded_file.name.endswith('.csv'):
-                raw_df = pd.read_csv(uploaded_file, header=None)
-            else:
-                raw_df = pd.read_excel(uploaded_file, header=None)
+            # Load the Excel file to get sheet names
+            xls = pd.ExcelFile(uploaded_file)
+            sheet_choice = st.selectbox("Select Sheet to Process", xls.sheet_names)
             
-            # Find the row index that contains 'New Site Name' or 'Postcode'
-            header_idx = 0
-            for idx, row in raw_df.iterrows():
-                # FIX: Bulletproof list comprehension that forces EVERY cell to be a string before joining
-                row_str = " ".join([str(val) for val in row.values]).lower()
-                if 'new site name' in row_str or 'postcode' in row_str:
-                    header_idx = idx
-                    break
-            
-            # 2. Reload the dataframe using the correct header row
-            if uploaded_file.name.endswith('.csv'):
-                df = pd.read_csv(uploaded_file, header=header_idx)
-            else:
-                df = pd.read_excel(uploaded_file, header=header_idx)
-            
-            # 3. Find where the picks start (Column I / after Postcode)
-            try:
-                # Get the index of the 'Postcode' column
-                postcode_col_idx = df.columns.get_loc('Postcode')
-                start_col_idx = postcode_col_idx + 1
-            except:
-                # Fallback to column I (index 8) if headers are weird
-                start_col_idx = 8
-            
-            # 4. Parse the data
-            processed_stores = []
-            total_items_picked = 0
-            
-            for index, row in df.iterrows():
-                site_name = str(row.get('New Site Name', '')).strip()
-                postcode = str(row.get('Postcode', '')).strip()
+            if st.button("Generate Printable Pick Lists"):
+                # Load the raw sheet without assuming ANY headers
+                raw_df = pd.read_excel(uploaded_file, sheet_name=sheet_choice, header=None)
                 
-                # Skip completely empty rows
-                if pd.isna(site_name) or site_name.lower() == 'nan' or site_name == '':
-                    continue
-                    
-                picks = []
-                # Loop through the columns in pairs of 2 (Item -> QTY)
-                for i in range(start_col_idx, len(df.columns), 2):
-                    if i + 1 < len(df.columns):
-                        item_name = str(df.columns[i]).strip()
-                        version = str(row.iloc[i]).strip()
-                        qty = str(row.iloc[i+1]).strip()
+                # --- THE GRID HUNTER ---
+                # We physically scan the spreadsheet to find the exact coordinates of our target columns
+                site_col = -1
+                postcode_col = -1
+                item_header_row = -1
+                first_qty_col = -1
+                
+                for r_idx, row in raw_df.iterrows():
+                    for c_idx, cell_val in enumerate(row):
+                        val_str = str(cell_val).strip().lower()
                         
-                        # Only add if it's a real version and not marked 'X' or 'nan'
-                        if version.upper() != 'X' and version.lower() != 'nan' and version != '':
-                            if qty.upper() != 'X' and qty.lower() != 'nan' and qty != '':
-                                picks.append({
-                                    'Item': item_name,
-                                    'Version': version,
-                                    'Qty': qty
-                                })
-                                try:
-                                    # Added an extra float conversion layer just in case quantities are logged as '100.0'
-                                    total_items_picked += int(float(qty))
-                                except:
-                                    pass
+                        if val_str == 'new site name':
+                            site_col = c_idx
+                        elif val_str == 'postcode':
+                            postcode_col = c_idx
+                        elif val_str == 'qty' and item_header_row == -1:
+                            # We found the first QTY! This tells us exactly where the items start
+                            item_header_row = r_idx
+                            first_qty_col = c_idx
+
+                # Safety fallbacks just in case the marketing team misspelled a column header
+                if site_col == -1: site_col = 1
+                if postcode_col == -1: postcode_col = 7
                 
-                # Only add the store to the print run if they actually have picks
-                if picks:
-                    processed_stores.append({
-                        'Site': site_name,
-                        'Postcode': postcode,
-                        'Picks': picks
-                    })
-            
-            # 5. Display Summary
-            if processed_stores:
-                m1, m2 = st.columns(2)
-                with m1:
-                    st.markdown(f"<div class='metric-card'><h4>Stores to Pack</h4><p class='stat-text'>{len(processed_stores)}</p></div>", unsafe_allow_html=True)
-                with m2:
-                    st.markdown(f"<div class='metric-card'><h4>Total Items Picked</h4><p class='stat-text'>{total_items_picked:,}</p></div>", unsafe_allow_html=True)
+                # Set our starting points based on what the hunter found
+                if item_header_row != -1 and first_qty_col != -1:
+                    start_col_idx = first_qty_col - 1 # Items always start one column left of the first QTY
+                    data_start_row = item_header_row + 1 # Data always starts the row below the headers
+                else:
+                    # Absolute fallback if QTY isn't found
+                    item_header_row = 2 
+                    start_col_idx = 8
+                    data_start_row = 3
                 
-                st.success(f"✅ Successfully extracted {len(processed_stores)} store allocations.")
+                # --- EXTRACTION ENGINE ---
+                processed_stores = []
+                total_items_picked = 0
                 
-                # 6. Generate the Printable Document
-                if st.button("Generate Printable Pick Lists"):
+                for idx in range(data_start_row, len(raw_df)):
+                    row = raw_df.iloc[idx]
+                    
+                    site_name = str(row.iloc[site_col]).strip()
+                    postcode_val = str(row.iloc[postcode_col]).strip()
+                    
+                    # Skip completely empty rows
+                    if pd.isna(site_name) or site_name.lower() == 'nan' or site_name == '':
+                        continue
+                        
+                    picks = []
+                    
+                    # Step across the columns in pairs of 2
+                    for col_i in range(start_col_idx, len(raw_df.columns), 2):
+                        if col_i + 1 < len(raw_df.columns):
+                            # Grab the item name from the header row
+                            item_name = str(raw_df.iloc[item_header_row, col_i]).strip()
+                            
+                            # If it's not "QTY" and not blank, it's a valid product!
+                            if item_name.upper() != 'QTY' and item_name.lower() != 'nan' and item_name != '':
+                                version = str(row.iloc[col_i]).strip()
+                                qty = str(row.iloc[col_i + 1]).strip()
+                                
+                                # Ignore the 'X' markers and empty cells
+                                if version.upper() != 'X' and version.lower() != 'nan' and version != '':
+                                    if qty.upper() != 'X' and qty.lower() != 'nan' and qty != '' and qty != '0' and qty != '0.0':
+                                        
+                                        # Clean up the quantity format
+                                        try:
+                                            clean_qty = int(float(qty))
+                                        except ValueError:
+                                            clean_qty = qty
+                                            
+                                        picks.append({
+                                            'Item': item_name,
+                                            'Version': version,
+                                            'Qty': clean_qty
+                                        })
+                                        
+                                        try:
+                                            total_items_picked += int(float(qty))
+                                        except:
+                                            pass
+                    
+                    # Only add the store to the print run if they actually have active picks
+                    if picks:
+                        processed_stores.append({
+                            'Site': site_name,
+                            'Postcode': postcode_val,
+                            'Picks': picks
+                        })
+                
+                # --- DISPLAY ---
+                if processed_stores:
+                    m1, m2 = st.columns(2)
+                    with m1:
+                        st.markdown(f"<div class='metric-card'><h4>Stores to Pack</h4><p class='stat-text'>{len(processed_stores)}</p></div>", unsafe_allow_html=True)
+                    with m2:
+                        st.markdown(f"<div class='metric-card'><h4>Total Items Picked</h4><p class='stat-text'>{total_items_picked:,}</p></div>", unsafe_allow_html=True)
+                    
+                    st.success(f"✅ Successfully extracted {len(processed_stores)} store allocations.")
+                    
                     html_output = generate_pick_list_html(processed_stores, campaign_name)
                     st.components.v1.html(html_output, height=800, scrolling=True)
-            else:
-                st.warning("Could not find any active picks in this file. Check the format.")
-                
+                else:
+                    st.warning("Could not find any active picks on this sheet. Make sure you selected the correct Drop sheet.")
+                    
         except Exception as e:
             st.error(f"Error processing matrix: {e}")
             
     else:
-        st.info("👈 Please upload the Drop Matrix to begin.")
+        st.info("👈 Please upload the Stonegate Matrix to begin.")
