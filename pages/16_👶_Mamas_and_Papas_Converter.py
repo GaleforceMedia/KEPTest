@@ -105,7 +105,8 @@ with col_summary:
                 
             # 6. Create Downloadable Excel Payload
             output = io.BytesIO()
-            with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+            # CHANGED: engine='xlsxwriter' is now engine='openpyxl'
+            with pd.ExcelWriter(output, engine='openpyxl') as writer:
                 df_out.to_excel(writer, index=False, sheet_name='Collation Output')
             
             # Display success metrics
