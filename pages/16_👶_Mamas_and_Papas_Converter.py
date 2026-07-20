@@ -87,7 +87,7 @@ M&S Warrington
 M&S Westwood Cross
 M&S York"""
 
-TARGET_ORDER = [s.strip().upper() for s in TARGET_STORES_RAW.split('\n')]
+TARGET_ORDER = [str(s).strip().upper() for s in TARGET_STORES_RAW.split('\n')]
 
 col_upload, col_summary = st.columns([1, 2], gap="large")
 
@@ -104,13 +104,13 @@ with col_summary:
             df_client = pd.read_excel(uploaded_file, sheet_name=0, header=None)
             
             # 2. SMART DETECTOR: Dynamically find rows based on M&P's changing headers
-            col_0 = df_client.iloc[:, 0].astype(str).str.lower().str.strip()
-            
+            # (Force cast to string to prevent float/NaN length errors)
             def get_row_idx(keywords):
-                for i, val in enumerate(col_0):
-                    if any(kw in val for kw in keywords):
+                for i in range(len(df_client)):
+                    val_str = str(df_client.iloc[i, 0]).lower()
+                    if any(kw in val_str for kw in keywords):
                         return i
-                return -1 # Returns -1 if they didn't include this row in the spreadsheet
+                return -1 
                 
             mappings = {
                 'job_num': get_row_idx(['kep job number', 'uploaded & ready']),
@@ -123,7 +123,7 @@ with col_summary:
                 'spec': get_row_idx(['spec'])
             }
             
-            # Find the max row used by headers so we know where the stores begin
+            # Find the max row used by headers so we know exactly where the stores begin
             max_header_idx = max(filter(lambda x: x != -1, mappings.values()))
             
             # 3. Determine Column Structure
@@ -167,19 +167,20 @@ with col_summary:
                             mat, fin = spec.split(',', 1)
                             df_out.iloc[10, out_col] = mat.strip()
                             df_out.iloc[12, out_col] = fin.strip()
-                        elif spec.lower() != 'nan':
+                        elif spec.lower() not in ['nan', 'none', '']:
                             df_out.iloc[10, out_col] = spec
                             df_out.iloc[12, out_col] = ""
                             
                     df_out.iloc[11, out_col] = "4/0"
                     df_out.iloc[6, out_col] = 1      
 
-            # 6. Build a Map of all Stores in the Excel File
-            col_0_upper = df_client.iloc[:, 0].astype(str).str.strip().str.upper()
+            # 6. Build a Map of all Stores in the Excel File (Stripped of NaNs to block float errors)
             excel_store_map = {}
-            for i, val in enumerate(col_0_upper):
-                if i > max_header_idx and val != 'NAN' and val != '':
-                    excel_store_map[val] = i
+            for i in range(len(df_client)):
+                val_str = str(df_client.iloc[i, 0]).strip().upper()
+                # Ensure we are past the headers and the cell isn't empty/NaN
+                if i > max_header_idx and val_str not in ['NAN', 'NONE', '']:
+                    excel_store_map[val_str] = i
 
             # Helper function for fuzzy matching (e.g. "Southampton" vs "Southampton - New Location")
             def find_excel_store(target):
@@ -196,9 +197,9 @@ with col_summary:
             for target_store in TARGET_ORDER:
                 row_data = [None] * len(cols)
                 
-                # Check for blank line request
+                # Check for blank line request from the user's list
                 if target_store == "":
-                    df_out.loc[current_out_row] = row_data # Insert fully blank row
+                    df_out.loc[current_out_row] = row_data 
                     current_out_row += 1
                     continue
                 
