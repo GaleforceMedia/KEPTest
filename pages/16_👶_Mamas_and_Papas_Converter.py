@@ -19,6 +19,76 @@ st.title("👶 Mamas & Papas Spreadsheet Converter")
 st.write("Upload the Mamas & Papas allocation sheet to automatically generate the KEP dispatch-ready file.")
 st.divider()
 
+# --- CUSTOM STORE ORDER (Includes blank lines for grouping) ---
+TARGET_STORES_RAW = """ARNOTTS
+BLANCHARDSTOWN
+DUNDRUM
+BELFAST
+BIRMINGHAM GALLAGHER
+CROYDON
+EDINBURGH
+FAREHAM
+FARNBOROUGH
+GATESHEAD
+GLASGOW
+HULL
+LEEDS
+LIVERPOOL SPEKE
+NOTTINGHAM
+SOUTHAMPTON - NEW Location
+STRATFORD
+STOCKTON
+SWINDON
+THURROCK
+TRAFFORD 
+WHITE CITY
+OUTLET
+
+NEXT ARNDALE
+NEXT BEDFORD
+NEXT BRENT CROSS
+NEXT BRISTOL
+NEXT Charlton
+NEXT Chelsford
+NEXT Cheltenham
+NEXT Crawley
+NEXT Dundee
+NEXT Enfield
+NEXT EXETER
+NEXT HAYES
+NEXT HIGH WYCOMBE
+NEXT Ipswich
+NEXT Leicester 
+NEXT Luton
+NEXT MAIDSTONE
+NEXT MILTON KEYNES
+NEXT New Malden
+NEXT NORWICH
+NEXT Oxford
+NEXT Peterborough
+NEXT Plymouth
+NEXT Poole
+NEXT Preston
+NEXT SHEFFIELD
+NEXT SHOREHAM
+NEXT Shrewsbury
+NEXT SOLIHULL
+NEXT SWANSEA
+NEXT Tamworth
+NEXT WATFORD
+
+M&S Banbury
+M&S Bluewater
+M&S Cardiff
+M&S Cheshire Oaks
+M&S Lisburn
+M&S Longbridge
+M&S Warrington
+M&S Westwood Cross
+M&S York"""
+
+TARGET_ORDER = [s.strip().upper() for s in TARGET_STORES_RAW.split('\n')]
+
 col_upload, col_summary = st.columns([1, 2], gap="large")
 
 with col_upload:
@@ -33,15 +103,37 @@ with col_summary:
             # 1. Read Client File
             df_client = pd.read_excel(uploaded_file, sheet_name=0, header=None)
             
-            # 2. Determine Column Structure
+            # 2. SMART DETECTOR: Dynamically find rows based on M&P's changing headers
+            col_0 = df_client.iloc[:, 0].astype(str).str.lower().str.strip()
+            
+            def get_row_idx(keywords):
+                for i, val in enumerate(col_0):
+                    if any(kw in val for kw in keywords):
+                        return i
+                return -1 # Returns -1 if they didn't include this row in the spreadsheet
+                
+            mappings = {
+                'job_num': get_row_idx(['kep job number', 'uploaded & ready']),
+                'design': get_row_idx(['job number', 'name', 'design', 'job name']),
+                'size': get_row_idx(['comments', 'size']),
+                'qty': get_row_idx(['number of units', 'total units', 'quantity']),
+                'cost_pu': get_row_idx(['cost per unit']),
+                'total_cost': get_row_idx(['total cost', 'costs']),
+                'link': get_row_idx(['link']),
+                'spec': get_row_idx(['spec'])
+            }
+            
+            # Find the max row used by headers so we know where the stores begin
+            max_header_idx = max(filter(lambda x: x != -1, mappings.values()))
+            
+            # 3. Determine Column Structure
             num_items = df_client.shape[1] - 1 
             cols = ['Shop Types', 'Delivery Contact', 'Shop Name', 'Address 1', 'Address 2', 
                     'Address 3', 'Address 4', 'Postcode', 'Pick'] + list(range(1, num_items + 1))
             
-            # Force dtype object so pandas doesn't lock columns as floats
             df_out = pd.DataFrame(columns=cols, dtype=object)
             
-            # 3. Setup Header Formatting (Rows 0-14)
+            # 4. Setup Dispatch Header Formatting (Rows 0-14)
             header_rows = 15
             for i in range(header_rows):
                 df_out.loc[i] = [None] * len(cols)
@@ -55,57 +147,95 @@ with col_summary:
             for row_idx, label in pick_labels.items():
                 df_out.loc[row_idx, 'Pick'] = label
                 
-            # 4. Map Item Specifications
+            # 5. Map Item Specifications dynamically based on what the detector found
             for col_idx in range(1, num_items + 1):
                 if col_idx < df_client.shape[1]:
-                    out_col = col_idx + 8 # Offset by the 9 prefix columns
+                    out_col = col_idx + 8
                     
-                    df_out.iloc[1, out_col] = df_client.iloc[0, col_idx]   # Job Number
-                    df_out.iloc[2, out_col] = df_client.iloc[1, col_idx]   # Design
-                    df_out.iloc[4, out_col] = df_client.iloc[2, col_idx]   # Size
-                    df_out.iloc[7, out_col] = df_client.iloc[4, col_idx]   # Quantity
-                    df_out.iloc[8, out_col] = df_client.iloc[5, col_idx]   # Cost Per Unit
-                    df_out.iloc[9, out_col] = df_client.iloc[6, col_idx]   # Total Cost
-                    df_out.iloc[5, out_col] = df_client.iloc[9, col_idx]   # Code
-                    df_out.iloc[13, out_col] = df_client.iloc[10, col_idx] # Artwork Link
+                    if mappings['job_num'] != -1: df_out.iloc[1, out_col] = df_client.iloc[mappings['job_num'], col_idx]
+                    if mappings['design'] != -1: df_out.iloc[2, out_col] = df_client.iloc[mappings['design'], col_idx]
+                    if mappings['size'] != -1: df_out.iloc[4, out_col] = df_client.iloc[mappings['size'], col_idx]
+                    if mappings['qty'] != -1: df_out.iloc[7, out_col] = df_client.iloc[mappings['qty'], col_idx]
+                    if mappings['cost_pu'] != -1: df_out.iloc[8, out_col] = df_client.iloc[mappings['cost_pu'], col_idx]
+                    if mappings['total_cost'] != -1: df_out.iloc[9, out_col] = df_client.iloc[mappings['total_cost'], col_idx]
+                    if mappings['link'] != -1: df_out.iloc[13, out_col] = df_client.iloc[mappings['link'], col_idx]
                     
-                    # Intelligent Split of Specs into Material and Finishing
-                    spec = str(df_client.iloc[11, col_idx])
-                    if ',' in spec:
-                        mat, fin = spec.split(',', 1)
-                        df_out.iloc[10, out_col] = mat.strip()
-                        df_out.iloc[12, out_col] = fin.strip()
-                    else:
-                        df_out.iloc[10, out_col] = spec
-                        df_out.iloc[12, out_col] = ""
-                        
-                    df_out.iloc[11, out_col] = "4/0" # Default Print
-                    df_out.iloc[6, out_col] = 1      # Default Versions
+                    # Material & Finishing parsing
+                    if mappings['spec'] != -1:
+                        spec = str(df_client.iloc[mappings['spec'], col_idx])
+                        if ',' in spec:
+                            mat, fin = spec.split(',', 1)
+                            df_out.iloc[10, out_col] = mat.strip()
+                            df_out.iloc[12, out_col] = fin.strip()
+                        elif spec.lower() != 'nan':
+                            df_out.iloc[10, out_col] = spec
+                            df_out.iloc[12, out_col] = ""
+                            
+                    df_out.iloc[11, out_col] = "4/0"
+                    df_out.iloc[6, out_col] = 1      
 
-            # 5. Map Store Allocations
-            store_start_row = 12
-            store_rows = df_client.iloc[store_start_row:].copy()
+            # 6. Build a Map of all Stores in the Excel File
+            col_0_upper = df_client.iloc[:, 0].astype(str).str.strip().str.upper()
+            excel_store_map = {}
+            for i, val in enumerate(col_0_upper):
+                if i > max_header_idx and val != 'NAN' and val != '':
+                    excel_store_map[val] = i
+
+            # Helper function for fuzzy matching (e.g. "Southampton" vs "Southampton - New Location")
+            def find_excel_store(target):
+                if target in excel_store_map: return target
+                for excel_store in excel_store_map:
+                    if len(excel_store) > 3 and (target in excel_store or excel_store in target):
+                        return excel_store
+                return None
+
+            # 7. Write Stores to Output Based on User's Custom Sort Order
+            processed_stores = set()
+            current_out_row = header_rows
             
-            total_stores_processed = 0
-            for i in range(len(store_rows)):
-                row_data = [None] * 9
-                store_name = store_rows.iloc[i, 0]
+            for target_store in TARGET_ORDER:
+                row_data = [None] * len(cols)
                 
-                # Skip truly empty rows to keep the file clean
-                if pd.isna(store_name) or str(store_name).strip() == '':
+                # Check for blank line request
+                if target_store == "":
+                    df_out.loc[current_out_row] = row_data # Insert fully blank row
+                    current_out_row += 1
                     continue
+                
+                matched_excel_name = find_excel_store(target_store)
+                
+                row_data[2] = target_store.title()
+                row_data[8] = target_store.title()
+                
+                if matched_excel_name:
+                    # Pull the quantities from the Excel file
+                    excel_row_idx = excel_store_map[matched_excel_name]
+                    quants = df_client.iloc[excel_row_idx, 1:num_items+1].tolist()
+                    row_data[9:] = quants
+                    processed_stores.add(matched_excel_name)
+                
+                df_out.loc[current_out_row] = row_data
+                current_out_row += 1
+                
+            # 8. Data Loss Prevention: Append any remaining stores not caught in the list (e.g. "SPARES")
+            leftover_stores = [s for s in excel_store_map if s not in processed_stores]
+            if leftover_stores:
+                df_out.loc[current_out_row] = [None] * len(cols) # Add a visual blank line before leftovers
+                current_out_row += 1
+                for left_store in leftover_stores:
+                    row_data = [None] * len(cols)
+                    row_data[2] = left_store.title()
+                    row_data[8] = left_store.title()
                     
-                row_data[2] = store_name # Shop Name
-                row_data[8] = store_name # Pick / Drive Line
-                
-                quants = store_rows.iloc[i, 1:num_items+1].tolist()
-                row_data.extend(quants)
-                df_out.loc[header_rows + total_stores_processed] = row_data
-                total_stores_processed += 1
-                
-            # 6. Create Downloadable Excel Payload
+                    excel_row_idx = excel_store_map[left_store]
+                    quants = df_client.iloc[excel_row_idx, 1:num_items+1].tolist()
+                    row_data[9:] = quants
+                    
+                    df_out.loc[current_out_row] = row_data
+                    current_out_row += 1
+
+            # 9. Create Downloadable Excel Payload
             output = io.BytesIO()
-            # CHANGED: engine='xlsxwriter' is now engine='openpyxl'
             with pd.ExcelWriter(output, engine='openpyxl') as writer:
                 df_out.to_excel(writer, index=False, sheet_name='Collation Output')
             
@@ -114,9 +244,10 @@ with col_summary:
             with m1:
                 st.markdown(f"<div class='metric-card'><h4>Campaign Items</h4><p class='stat-text'>{num_items}</p></div>", unsafe_allow_html=True)
             with m2:
-                st.markdown(f"<div class='metric-card'><h4>Locations Mapped</h4><p class='stat-text'>{total_stores_processed}</p></div>", unsafe_allow_html=True)
+                total_mapped = len([s for s in TARGET_ORDER if s != ""]) + len(leftover_stores)
+                st.markdown(f"<div class='metric-card'><h4>Locations Mapped</h4><p class='stat-text'>{total_mapped}</p></div>", unsafe_allow_html=True)
             
-            st.success("✅ File transposed successfully and ready for the collation team!")
+            st.success("✅ File transposed, intelligently ordered, and ready for the collation team!")
             
             smart_filename = str(uploaded_file.name).replace('.xlsx', '') + "_DISPATCH.xlsx"
             
