@@ -37,12 +37,14 @@ with col_summary:
             num_items = df_client.shape[1] - 1 
             cols = ['Shop Types', 'Delivery Contact', 'Shop Name', 'Address 1', 'Address 2', 
                     'Address 3', 'Address 4', 'Postcode', 'Pick'] + list(range(1, num_items + 1))
-            df_out = pd.DataFrame(columns=cols)
+            
+            # Force dtype object so pandas doesn't lock columns as floats
+            df_out = pd.DataFrame(columns=cols, dtype=object)
             
             # 3. Setup Header Formatting (Rows 0-14)
             header_rows = 15
             for i in range(header_rows):
-                df_out.loc[i] = [np.nan] * len(cols)
+                df_out.loc[i] = [None] * len(cols)
                 
             pick_labels = {
                 1: 'Job Number', 2: 'Design', 3: 'Artwork', 4: 'Size', 5: 'Code',
@@ -86,7 +88,7 @@ with col_summary:
             
             total_stores_processed = 0
             for i in range(len(store_rows)):
-                row_data = [np.nan] * 9
+                row_data = [None] * 9
                 store_name = store_rows.iloc[i, 0]
                 
                 # Skip truly empty rows to keep the file clean
@@ -115,7 +117,6 @@ with col_summary:
             
             st.success("✅ File transposed successfully and ready for the collation team!")
             
-            # Use original uploaded filename to create a smart output name
             smart_filename = str(uploaded_file.name).replace('.xlsx', '') + "_DISPATCH.xlsx"
             
             st.download_button(
