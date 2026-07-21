@@ -18,91 +18,44 @@ st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;800&display=swap');
 
-    html, body, [class*="css"] {
-        font-family: 'Montserrat', sans-serif !important;
-    }
-    #MainMenu {visibility: hidden;}
-    footer {visibility: hidden;}
-    header {visibility: hidden;}
+    html, body, [class*="css"] { font-family: 'Montserrat', sans-serif !important; }
+    #MainMenu {visibility: hidden;} footer {visibility: hidden;} header {visibility: hidden;}
 
     .kep-banner {
-        background-color: white;
-        padding: 2rem 2.5rem;
-        border-radius: 12px;
-        margin-top: -2rem;
-        margin-bottom: 2rem;
-        border-top: 8px solid #004B87;
+        background-color: white; padding: 2rem 2.5rem; border-radius: 12px;
+        margin-top: -2rem; margin-bottom: 2rem; border-top: 8px solid #004B87;
         box-shadow: 0 4px 20px rgba(0,0,0,0.05);
     }
-    .kep-banner h1 {
-        color: #004B87 !important;
-        margin: 0.5rem 0 0.2rem 0;
-        font-size: 2.2rem;
-        font-weight: 800;
-        letter-spacing: -0.5px;
-    }
-    .kep-banner p {
-        margin: 0;
-        color: #555;
-        font-size: 1.1rem;
-        font-weight: 400;
-    }
+    .kep-banner h1 { color: #004B87 !important; margin: 0.5rem 0 0.2rem 0; font-size: 2.2rem; font-weight: 800; letter-spacing: -0.5px; }
+    .kep-banner p { margin: 0; color: #555; font-size: 1.1rem; font-weight: 400; }
 
     .section-header {
-        color: #004B87;
-        font-weight: 800;
-        font-size: 1.3rem;
-        margin-top: 1.5rem;
-        margin-bottom: 1.2rem;
-        border-bottom: 2px solid #edf2f7;
-        padding-bottom: 0.5rem;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
+        color: #004B87; font-weight: 800; font-size: 1.3rem; margin-top: 1.5rem; margin-bottom: 1.2rem;
+        border-bottom: 2px solid #edf2f7; padding-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 0.5px;
     }
 
     .metric-card {
-        background: white;
-        padding: 24px;
-        border-radius: 10px;
-        border-left: 6px solid #004B87;
-        box-shadow: 0 4px 15px rgba(0,0,0,0.04);
-        text-align: left;
-        margin-bottom: 20px;
-        transition: transform 0.2s ease;
+        background: white; padding: 24px; border-radius: 10px; border-left: 6px solid #004B87;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.04); text-align: left; margin-bottom: 20px; transition: transform 0.2s ease;
     }
     .metric-card:hover { transform: translateY(-2px); }
-    .metric-card h4 {
-        margin: 0 0 8px 0; color: #8898aa; font-size: 0.9rem;
-        font-weight: 600; text-transform: uppercase; letter-spacing: 1px;
-    }
+    .metric-card h4 { margin: 0 0 8px 0; color: #8898aa; font-size: 0.9rem; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; }
     .stat-text { color: #004B87; font-size: 32px; font-weight: 800; margin: 0; }
 
     .stTextInput>div>div>input, .stTextArea>div>div>textarea, .stDateInput>div>div>input {
-        border: 1px solid #cbd5e0 !important; border-radius: 6px !important;
-        background-color: #f8fafc !important; transition: all 0.2s ease;
+        border: 1px solid #cbd5e0 !important; border-radius: 6px !important; background-color: #f8fafc !important; transition: all 0.2s ease;
     }
     .stTextInput>div>div>input:focus, .stTextArea>div>div>textarea:focus, .stDateInput>div>div>input:focus {
-        border-color: #004B87 !important; background-color: white !important;
-        box-shadow: 0 0 0 1px #004B87 !important;
+        border-color: #004B87 !important; background-color: white !important; box-shadow: 0 0 0 1px #004B87 !important;
     }
 
     .stButton>button {
-        background: linear-gradient(135deg, #004B87 0%, #002D54 100%);
-        color: white !important; border-radius: 8px; font-weight: 600 !important;
-        padding: 0.8rem 1.5rem; width: 100%; border: none; font-size: 1.1rem;
+        background: linear-gradient(135deg, #004B87 0%, #002D54 100%); color: white !important; border-radius: 8px;
+        font-weight: 600 !important; padding: 0.8rem 1.5rem; width: 100%; border: none; font-size: 1.1rem;
         box-shadow: 0 4px 14px rgba(0, 75, 135, 0.25); transition: all 0.3s ease;
     }
     .stButton>button:hover {
-        background: linear-gradient(135deg, #00569b 0%, #003666 100%);
-        box-shadow: 0 6px 20px rgba(0, 75, 135, 0.4); transform: translateY(-1px);
-    }
-
-    [data-testid="stDownloadButton"]>button {
-        background: white !important; color: #004B87 !important;
-        border: 2px solid #004B87 !important; box-shadow: none !important;
-    }
-    [data-testid="stDownloadButton"]>button:hover {
-        background: #f0f7fd !important; transform: none !important;
+        background: linear-gradient(135deg, #00569b 0%, #003666 100%); box-shadow: 0 6px 20px rgba(0, 75, 135, 0.4); transform: translateY(-1px);
     }
     </style>
     """, unsafe_allow_html=True)
@@ -114,8 +67,8 @@ st.markdown("<div class='kep-banner'>", unsafe_allow_html=True)
 if logo_path:
     st.image(logo_path, width=180)
 st.markdown("""
-    <h1>Dispatch Route & Logistics Planner</h1>
-    <p>Calculate optimal driver sequences and instantly generate automated delivery notes.</p>
+    <h1>Intelligent Fleet Router</h1>
+    <p>Automatically scales your fleet to minimize costs while generating driver manifests and delivery notes.</p>
     </div>
 """, unsafe_allow_html=True)
 
@@ -179,11 +132,12 @@ def geocode_places_osm(place_list, progress_bar, status_text):
 col_inputs, col_map = st.columns([1, 2], gap="large")
 
 with col_inputs:
-    st.markdown("<h3 class='section-header'>📍 Route Parameters</h3>", unsafe_allow_html=True)
+    st.markdown("<h3 class='section-header'>📍 Fleet Parameters</h3>", unsafe_allow_html=True)
     depot_postcode = st.text_input("Depot Postcode (Start & End)", value="B77 5AE")
     raw_locations = st.text_area("Paste Locations (Names or Postcodes)", height=150, 
                                  placeholder="e.g.\nCV1 2HN\nTamworth High School B77 3AA\nM&S Banbury")
-    num_vans = st.slider("Number of Vans / Runs", min_value=1, max_value=5, value=1)
+    max_vans = st.slider("Maximum Available Vans", min_value=1, max_value=5, value=3,
+                         help="The engine will try to use 1 van. It will only deploy extra vans if shifts exceed 10 hours.")
     
     st.markdown("<h3 class='section-header'>📝 Manifest Data</h3>", unsafe_allow_html=True)
     col_dn1, col_dn2 = st.columns(2)
@@ -195,7 +149,7 @@ with col_inputs:
     job_desc = st.text_input("Job Title / Description", placeholder="e.g. Perm POS - Hand Washing...")
     
     st.markdown("<br>", unsafe_allow_html=True)
-    calculate_btn = st.button("🗺️ Compile Logistics Plan")
+    calculate_btn = st.button("🗺️ Optimize Fleet & Generate Docs")
 
 with col_map:
     st.markdown("<h3 class='section-header'>🗺️ Interactive Route Map</h3>", unsafe_allow_html=True)
@@ -233,7 +187,7 @@ with col_map:
             drop_data.update(geocode_places_osm(place_names_only, pb, status_container))
             progress_container.empty()
             
-        status_container.text("Calculating optimal driving routes...")
+        status_container.text("Evaluating Fleet Configurations...")
         
         valid_drops, failed_drops = [], []
         for loc in raw_list:
@@ -250,17 +204,85 @@ with col_map:
             status_container.empty()
             st.stop()
 
-        van_assignments = {i: [] for i in range(num_vans)}
-        actual_vans = min(num_vans, len(valid_drops))
+        # --- FLEET OPTIMIZER ENGINE ---
+        # Constants for decision making
+        DROP_TIME_HOURS = 15 / 60.0  # 15 mins per drop
+        FLEX_LIMIT_HOURS = 11.5      # 10 hour target + 1.5h buffer to prevent deploying a whole new van
         
-        if actual_vans > 1:
-            coords = [[d['lat'], d['lon']] for d in valid_drops]
-            kmeans = KMeans(n_clusters=actual_vans, random_state=42, n_init='auto')
-            labels = kmeans.fit_predict(coords)
-            for drop, label in zip(valid_drops, labels):
-                van_assignments[label].append(drop)
-        else: van_assignments[0] = valid_drops
+        best_routes_data = {}
+        optimal_vans_used = 1
+        
+        for k in range(1, max_vans + 1):
+            status_container.text(f"Testing cost-efficiency of using {k} van(s)...")
+            actual_k = min(k, len(valid_drops))
             
+            temp_assignments = {i: [] for i in range(actual_k)}
+            if actual_k > 1:
+                coords = [[d['lat'], d['lon']] for d in valid_drops]
+                kmeans = KMeans(n_clusters=actual_k, random_state=42, n_init='auto')
+                labels = kmeans.fit_predict(coords)
+                for drop, label in zip(valid_drops, labels):
+                    temp_assignments[label].append(drop)
+            else:
+                temp_assignments[0] = valid_drops
+            
+            plan_valid = True
+            temp_routes_data = {}
+            max_van_time_in_plan = 0
+            
+            for van_id, drops in temp_assignments.items():
+                if not drops: continue
+                depot_block = {
+                    'query': 'KEP DEPOT', 'full_address': f'KEP Print Group, {depot_postcode}', 
+                    'postcode': depot_pc_extracted, 'lat': depot_lat, 'lon': depot_lon
+                }
+                
+                input_points = [depot_block] + drops
+                coords_str = ";".join([f"{p['lon']},{p['lat']}" for p in input_points])
+                url = f"http://router.project-osrm.org/trip/v1/driving/{coords_str}?source=first&roundtrip=true&geometries=geojson"
+                
+                try:
+                    resp = requests.get(url)
+                    data = resp.json()
+                    if data.get('code') == 'Ok':
+                        route = data['trips'][0]
+                        drive_hours = route['duration'] / 3600 
+                        miles = route['distance'] / 1609.34
+                        total_shift_time = drive_hours + (len(drops) * DROP_TIME_HOURS)
+                        
+                        if total_shift_time > max_van_time_in_plan:
+                            max_van_time_in_plan = total_shift_time
+                            
+                        temp_routes_data[van_id] = {
+                            'route_geom': route['geometry'],
+                            'waypoints': data['waypoints'],
+                            'miles': miles,
+                            'drive_hours': drive_hours,
+                            'total_shift_time': total_shift_time,
+                            'input_points': input_points
+                        }
+                    else: plan_valid = False
+                except Exception: plan_valid = False
+            
+            # Decision Tree
+            if plan_valid and max_van_time_in_plan <= FLEX_LIMIT_HOURS:
+                best_routes_data = temp_routes_data
+                optimal_vans_used = actual_k
+                break # We found a cost-effective plan that fits!
+            
+            if k == max_vans:
+                # Reached the absolute maximum vehicles allowed, must accept this plan
+                best_routes_data = temp_routes_data
+                optimal_vans_used = actual_k
+
+        status_container.empty()
+        
+        if optimal_vans_used < max_vans:
+            st.success(f"🤖 **Fleet Intelligence:** Assigned {optimal_vans_used} van(s) instead of {max_vans}. Shifts are under safe limits, saving deployment costs.")
+        else:
+            st.info(f"🤖 **Fleet Intelligence:** Deployed all {optimal_vans_used} available vans to balance the high workload.")
+
+        # --- MAP RENDERING ---
         m = folium.Map(location=[depot_lat, depot_lon], zoom_start=6)
         folium.Marker([depot_lat, depot_lon], popup="KEP Depot", icon=folium.Icon(color="black", icon="home")).add_to(m)
         
@@ -268,62 +290,45 @@ with col_map:
         total_miles, total_hours = 0, 0
         master_itinerary = []
         
-        for van_id, drops in van_assignments.items():
-            if not drops: continue
+        for van_id, r_data in best_routes_data.items():
             color = colors[van_id % len(colors)]
-            depot_block = {
-                'query': 'KEP DEPOT', 'full_address': f'KEP Print Group, {depot_postcode}', 
-                'postcode': depot_pc_extracted, 'lat': depot_lat, 'lon': depot_lon
-            }
             
-            input_points = [depot_block] + drops
-            coords_str = ";".join([f"{p['lon']},{p['lat']}" for p in input_points])
-            url = f"http://router.project-osrm.org/trip/v1/driving/{coords_str}?source=first&roundtrip=true&geometries=geojson"
+            miles = r_data['miles']
+            drive_hours = r_data['drive_hours']
+            shift_hours = r_data['total_shift_time']
+            input_points = r_data['input_points']
             
-            try:
-                resp = requests.get(url)
-                data = resp.json()
-                if data.get('code') == 'Ok':
-                    route = data['trips'][0]
-                    waypoints = data['waypoints']
-                    miles = route['distance'] / 1609.34
-                    duration = route['duration'] / 3600 
-                    total_miles += miles
-                    total_hours += duration
-                    
-                    folium.GeoJson(
-                        route['geometry'],
-                        name=f"Van {van_id+1}",
-                        style_function=lambda x, c=color: {'color': c, 'weight': 5, 'opacity': 0.8}
+            total_miles += miles
+            total_hours += drive_hours
+            
+            folium.GeoJson(
+                r_data['route_geom'], name=f"Van {van_id+1}",
+                style_function=lambda x, c=color: {'color': c, 'weight': 5, 'opacity': 0.8}
+            ).add_to(m)
+            
+            for i, wp in enumerate(r_data['waypoints']): input_points[i]['sequence'] = wp['waypoint_index']
+            optimized_drops = sorted(input_points, key=lambda x: x['sequence'])
+            
+            for i, p in enumerate(optimized_drops):
+                master_itinerary.append({
+                    "Van / Run": f"Van {van_id+1}", "Stop Sequence": i + 1,
+                    "Original Search": p['query'], "Extracted Postcode": p['postcode'],
+                    "Full Completed Address": p['full_address']
+                })
+            
+            st.markdown(f"**🚐 Van {van_id+1} Route** — Est. Drive: {int(drive_hours)}h {int((drive_hours % 1) * 60)}m | Shift Time (w/ drops): {int(shift_hours)}h {int((shift_hours % 1) * 60)}m | Mileage: {miles:.1f} mi")
+            df_display = pd.DataFrame({
+                "Stop": range(1, len(optimized_drops) + 1), "Search": [p['query'] for p in optimized_drops],
+                "Address Found": [p['full_address'] for p in optimized_drops]
+            })
+            st.dataframe(df_display, hide_index=True, use_container_width=True)
+            
+            for i, p in enumerate(optimized_drops):
+                if p['query'] != 'KEP DEPOT':
+                    folium.Marker(
+                        [p['lat'], p['lon']], popup=f"Stop {i+1}: {p['query']}",
+                        tooltip=p['full_address'], icon=folium.Icon(color=color, icon="info-sign")
                     ).add_to(m)
-                    
-                    for i, wp in enumerate(waypoints): input_points[i]['sequence'] = wp['waypoint_index']
-                    optimized_drops = sorted(input_points, key=lambda x: x['sequence'])
-                    
-                    for i, p in enumerate(optimized_drops):
-                        master_itinerary.append({
-                            "Van / Run": f"Van {van_id+1}", "Stop Sequence": i + 1,
-                            "Original Search": p['query'], "Extracted Postcode": p['postcode'],
-                            "Full Completed Address": p['full_address']
-                        })
-                    
-                    st.markdown(f"**🚐 Van {van_id+1} Route** — Est. Time: {int(duration)}h {int((duration % 1) * 60)}m | Mileage: {miles:.1f} mi")
-                    df_display = pd.DataFrame({
-                        "Stop": range(1, len(optimized_drops) + 1), "Search": [p['query'] for p in optimized_drops],
-                        "Address Found": [p['full_address'] for p in optimized_drops]
-                    })
-                    st.dataframe(df_display, hide_index=True, use_container_width=True)
-                    
-                    for i, p in enumerate(optimized_drops):
-                        if p['query'] != 'KEP DEPOT':
-                            folium.Marker(
-                                [p['lat'], p['lon']], popup=f"Stop {i+1}: {p['query']}",
-                                tooltip=p['full_address'], icon=folium.Icon(color=color, icon="info-sign")
-                            ).add_to(m)
-                else: st.error(f"Routing engine failed for Van {van_id+1}.")
-            except Exception: st.error(f"Could not calculate exact road route for Van {van_id+1}.")
-        
-        status_container.empty()
         
         st.markdown("<br>", unsafe_allow_html=True)
         m1, m2 = st.columns(2)
@@ -359,19 +364,16 @@ with col_map:
                     for copy_type in ["DRIVER COPY", "CUSTOMER COPY"]:
                         pdf.add_page()
                         
-                        # --- HEADER BLOCK ---
-                        try:
-                            pdf.image("keplogo.png", x=10, y=10, w=45)
+                        try: pdf.image("keplogo.png", x=10, y=10, w=45)
                         except Exception:
-                            try:
-                                pdf.image("keplogo.svg", x=10, y=10, w=45)
+                            try: pdf.image("keplogo.svg", x=10, y=10, w=45)
                             except Exception:
                                 pdf.set_font("helvetica", "B", 24)
                                 pdf.set_text_color(0, 75, 135)
                                 pdf.cell(0, 10, "KEP PRINT GROUP", ln=0, align="L")
                         
                         pdf.set_font("helvetica", "B", 24)
-                        pdf.set_text_color(0, 75, 135) # KEP Blue
+                        pdf.set_text_color(0, 75, 135)
                         pdf.set_xy(100, 15)
                         pdf.cell(100, 10, "DELIVERY NOTE", ln=0, align="R")
                         
@@ -386,7 +388,6 @@ with col_map:
                         pdf.line(10, 38, 200, 38)
                         pdf.set_line_width(0.2)
                         
-                        # --- ADDRESS & METADATA GRID ---
                         pdf.set_y(45)
                         pdf.set_font("helvetica", "B", 11)
                         pdf.set_text_color(0, 75, 135)
@@ -395,7 +396,6 @@ with col_map:
                         
                         start_y = pdf.get_y()
                         
-                        # Left Col: Address
                         pdf.set_font("helvetica", "", 10)
                         pdf.set_text_color(0, 0, 0)
                         pdf.set_xy(10, start_y)
@@ -403,19 +403,13 @@ with col_map:
                             if part.strip(): 
                                 pdf.cell(90, 5, part.strip(), ln=2)
                         
-                        # Right Col: Meta Data
                         pdf.set_xy(110, start_y)
                         ref_no = f"{job_number}-{row['Stop Sequence']}" if job_number else f"SEQ-{row['Stop Sequence']}"
                         
                         meta_data = [
-                            ("Note No:", ref_no),
-                            ("Date:", delivery_date_str),
-                            ("Method:", "KEP Van"),
-                            ("Job No:", job_number),
-                            ("Cust Ref:", ""),
-                            ("Consignment:", "")
+                            ("Note No:", ref_no), ("Date:", delivery_date_str), ("Method:", "KEP Van"),
+                            ("Job No:", job_number), ("Cust Ref:", ""), ("Consignment:", "")
                         ]
-                        
                         for label, val in meta_data:
                             pdf.set_x(110)
                             pdf.set_font("helvetica", "B", 9)
@@ -425,8 +419,6 @@ with col_map:
                             pdf.set_text_color(0, 0, 0)
                             pdf.cell(65, 5, str(val), border=0, ln=1)
                             
-                        # --- ITEMS TABLE ---
-                        # Table Header (Blue Fill)
                         pdf.set_y(max(pdf.get_y(), 95))
                         pdf.set_fill_color(0, 75, 135)
                         pdf.set_text_color(255, 255, 255)
@@ -437,7 +429,6 @@ with col_map:
                         pdf.cell(30, 8, "No. of", border=1, align="C", fill=True)
                         pdf.cell(30, 8, "Qty per Unit", border=1, ln=1, align="C", fill=True)
                         
-                        # Table Row
                         pdf.set_text_color(0, 0, 0)
                         pdf.set_draw_color(200, 200, 200)
                         pdf.set_font("helvetica", "", 9)
@@ -446,7 +437,6 @@ with col_map:
                         pdf.cell(30, 10, "0", border=1, align="C")
                         pdf.cell(30, 10, "0", border=1, ln=1, align="C")
                         
-                        # --- SIGNATURE BOX ---
                         pdf.ln(25)
                         pdf.set_fill_color(248, 249, 250)
                         pdf.set_draw_color(220, 220, 220)
@@ -461,7 +451,6 @@ with col_map:
                         pdf.ln(2)
                         pdf.set_text_color(0, 0, 0)
                         pdf.set_font("helvetica", "B", 9)
-                        
                         pdf.set_x(15)
                         pdf.cell(20, 8, "Print Name:")
                         pdf.line(35, pdf.get_y()+6, 100, pdf.get_y()+6)
@@ -475,7 +464,6 @@ with col_map:
                         pdf.cell(10, 8, "Date:")
                         pdf.line(130, pdf.get_y()+6, 190, pdf.get_y()+6)
                         
-                        # --- FOOTER ---
                         pdf.set_y(-25)
                         pdf.set_font("helvetica", "", 9)
                         pdf.set_text_color(100, 100, 100)
