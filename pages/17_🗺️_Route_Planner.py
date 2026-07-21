@@ -297,109 +297,110 @@ with col_map:
                 )
 
             # 2. PDF DELIVERY NOTES
-            pdf = FPDF()
-            pdf.set_auto_page_break(auto=True, margin=15)
-            today = datetime.datetime.now().strftime("%d/%m/%Y")
+            valid_drops_for_pdf = [r for r in master_itinerary if r['Original Search'] != 'KEP DEPOT']
             
-            for row in master_itinerary:
-                if row['Original Search'] == 'KEP DEPOT':
-                    continue
-                    
-                address = row['Full Completed Address']
+            if valid_drops_for_pdf:
+                pdf = FPDF()
+                pdf.set_auto_page_break(auto=True, margin=15)
+                today = datetime.datetime.now().strftime("%d/%m/%Y")
                 
-                # Create the 2 copies for every location seamlessly
-                for copy_type in ["Driver Copy", "Customer Copy"]:
-                    pdf.add_page()
+                for row in valid_drops_for_pdf:
+                    address = row['Full Completed Address']
                     
-                    # LOGO HEADER
-                    try:
-                        pdf.image("keplogo.png", x=10, y=10, w=40)
-                    except Exception:
+                    # Create the 2 copies for every location seamlessly
+                    for copy_type in ["Driver Copy", "Customer Copy"]:
+                        pdf.add_page()
+                        
+                        # LOGO HEADER
                         try:
-                            pdf.image("keplogo.svg", x=10, y=10, w=40)
+                            pdf.image("keplogo.png", x=10, y=10, w=40)
                         except Exception:
-                            pdf.set_font("helvetica", "B", 24)
-                            pdf.set_text_color(0, 75, 135)
-                            pdf.cell(0, 10, "KEP PRINT GROUP", ln=True, align="L")
-                            pdf.set_text_color(0, 0, 0)
-                            
-                    pdf.ln(15)
-                    pdf.set_font("helvetica", "B", 14)
-                    pdf.set_text_color(0, 0, 0)
-                    pdf.cell(0, 10, f"Delivery Note - {copy_type}", ln=True, align="L")
-                    pdf.ln(5)
-                    
-                    # ADDRESS BLOCK
-                    pdf.set_font("helvetica", "B", 10)
-                    pdf.cell(0, 6, "Deliver to", ln=True)
-                    pdf.set_font("helvetica", "", 10)
-                    
-                    addr_parts = address.split(',')
-                    for part in addr_parts:
-                        if part.strip():
-                            pdf.cell(0, 5, part.strip(), ln=True)
-                    pdf.ln(8)
-                    
-                    # SYSTEM INFO BLOCK
-                    col1 = 45
-                    col2 = 100
-                    
-                    def info_row(label, val):
+                            try:
+                                pdf.image("keplogo.svg", x=10, y=10, w=40)
+                            except Exception:
+                                pdf.set_font("helvetica", "B", 24)
+                                pdf.set_text_color(0, 75, 135)
+                                pdf.cell(0, 10, "KEP PRINT GROUP", ln=True, align="L")
+                                pdf.set_text_color(0, 0, 0)
+                                
+                        pdf.ln(15)
+                        pdf.set_font("helvetica", "B", 14)
+                        pdf.set_text_color(0, 0, 0)
+                        pdf.cell(0, 10, f"Delivery Note - {copy_type}", ln=True, align="L")
+                        pdf.ln(5)
+                        
+                        # ADDRESS BLOCK
                         pdf.set_font("helvetica", "B", 10)
-                        pdf.cell(col1, 8, label, border=1)
+                        pdf.cell(0, 6, "Deliver to", ln=True)
                         pdf.set_font("helvetica", "", 10)
-                        pdf.cell(col2, 8, str(val), border=1, ln=True)
+                        
+                        addr_parts = address.split(',')
+                        for part in addr_parts:
+                            if part.strip():
+                                pdf.cell(0, 5, part.strip(), ln=True)
+                        pdf.ln(8)
+                        
+                        # SYSTEM INFO BLOCK
+                        col1 = 45
+                        col2 = 100
+                        
+                        def info_row(label, val):
+                            pdf.set_font("helvetica", "B", 10)
+                            pdf.cell(col1, 8, label, border=1)
+                            pdf.set_font("helvetica", "", 10)
+                            pdf.cell(col2, 8, str(val), border=1, ln=True)
 
-                    ref_no = f"{job_number}-{row['Stop Sequence']}" if job_number else f"SEQ-{row['Stop Sequence']}"
+                        ref_no = f"{job_number}-{row['Stop Sequence']}" if job_number else f"SEQ-{row['Stop Sequence']}"
+                        
+                        info_row("Delivery Note No.", ref_no)
+                        info_row("Delivery Date:", today)
+                        info_row("Delivery Method", "Into Fulfilment")
+                        info_row("Job Number", job_number)
+                        info_row("Customer Reference", "")
+                        info_row("Consignment No", "")
+                        pdf.ln(8)
+                        
+                        # PRODUCTION ITEMS BLOCK
+                        pdf.set_font("helvetica", "B", 9)
+                        pdf.cell(100, 8, "Job Title", border=1)
+                        pdf.cell(30, 8, "Quantity Delivered", border=1, align="C")
+                        pdf.cell(20, 8, "No. of", border=1, align="C")
+                        pdf.cell(30, 8, "Quantity per Unit", border=1, ln=True, align="C")
+                        
+                        pdf.set_font("helvetica", "", 9)
+                        pdf.cell(100, 8, str(job_desc), border=1)
+                        pdf.cell(30, 8, str(job_qty) if job_qty else "", border=1, align="C")
+                        pdf.cell(20, 8, "0", border=1, align="C")
+                        pdf.cell(30, 8, "0", border=1, ln=True, align="C")
+                        
+                        pdf.ln(20)
+                        
+                        # SIGN OFF BLOCK
+                        pdf.set_font("helvetica", "B", 10)
+                        pdf.cell(0, 8, "Goods received in good condition", ln=True)
+                        pdf.set_font("helvetica", "", 10)
+                        pdf.cell(0, 8, "Print Name: ___________________________", ln=True)
+                        pdf.cell(0, 8, "Signature:  ___________________________", ln=True)
+                        pdf.cell(0, 8, "Date:       ___________________________", ln=True)
+                        
+                        # FOOTER / QUERY
+                        pdf.set_y(-30)
+                        pdf.set_font("helvetica", "I", 9)
+                        pdf.cell(0, 10, f"In case of queries please call 01827 280880 and quote the following reference number {ref_no}", ln=True, align="L")
+                        
+                # SAFE BYTE CONVERSION FOR STREAMLIT
+                try:
+                    pdf_bytes = bytes(pdf.output())
+                except Exception:
+                    pdf_bytes = pdf.output(dest="S").encode("latin-1")
                     
-                    info_row("Delivery Note No.", ref_no)
-                    info_row("Delivery Date:", today)
-                    info_row("Delivery Method", "Into Fulfilment")
-                    info_row("Job Number", job_number)
-                    info_row("Customer Reference", "")
-                    info_row("Consignment No", "")
-                    pdf.ln(8)
-                    
-                    # PRODUCTION ITEMS BLOCK
-                    pdf.set_font("helvetica", "B", 9)
-                    pdf.cell(100, 8, "Job Title", border=1)
-                    pdf.cell(30, 8, "Quantity Delivered", border=1, align="C")
-                    pdf.cell(20, 8, "No. of", border=1, align="C")
-                    pdf.cell(30, 8, "Quantity per Unit", border=1, ln=True, align="C")
-                    
-                    pdf.set_font("helvetica", "", 9)
-                    pdf.cell(100, 8, str(job_desc), border=1)
-                    pdf.cell(30, 8, str(job_qty) if job_qty else "", border=1, align="C")
-                    pdf.cell(20, 8, "0", border=1, align="C")
-                    pdf.cell(30, 8, "0", border=1, ln=True, align="C")
-                    
-                    pdf.ln(20)
-                    
-                    # SIGN OFF BLOCK
-                    pdf.set_font("helvetica", "B", 10)
-                    pdf.cell(0, 8, "Goods received in good condition", ln=True)
-                    pdf.set_font("helvetica", "", 10)
-                    pdf.cell(0, 8, "Print Name: ___________________________", ln=True)
-                    pdf.cell(0, 8, "Signature:  ___________________________", ln=True)
-                    pdf.cell(0, 8, "Date:       ___________________________", ln=True)
-                    
-                    # FOOTER / QUERY
-                    pdf.set_y(-30)
-                    pdf.set_font("helvetica", "I", 9)
-                    pdf.cell(0, 10, f"In case of queries please call 01827 280880 and quote the following reference number {ref_no}", ln=True, align="L")
-                    
-            try:
-                pdf_bytes = pdf.output()
-            except TypeError:
-                pdf_bytes = pdf.output(dest="S").encode("latin-1")
-                
-            with dl_col2:
-                st.download_button(
-                    label="⬇️ Download Delivery Notes (PDF)",
-                    data=pdf_bytes,
-                    file_name=f"KEP_Delivery_Notes_{job_number}.pdf" if job_number else "KEP_Delivery_Notes.pdf",
-                    mime="application/pdf"
-                )
+                with dl_col2:
+                    st.download_button(
+                        label="⬇️ Download Delivery Notes (PDF)",
+                        data=pdf_bytes,
+                        file_name=f"KEP_Delivery_Notes_{job_number}.pdf" if job_number else "KEP_Delivery_Notes.pdf",
+                        mime="application/pdf"
+                    )
 
     elif not calculate_btn:
         st.info("👈 Paste your locations and hit Optimize to generate the routes and delivery documentation.")
