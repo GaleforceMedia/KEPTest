@@ -25,37 +25,58 @@ st.write("Enter your delivery postcodes or store names to automatically generate
 st.divider()
 
 # --- HELPER FUNCTIONS ---
-def is_postcode(text):
-    """Checks if a string strictly matches a UK postcode format."""
-    pattern = r'^[A-Z]{1,2}[0-9][A-Z0-9]?\s?[0-9][A-Z]{2}$'
-    return bool(re.match(pattern, text.strip().upper()))
+def extract_postcode(text):
+    """Scans text and extracts a UK postcode if one exists anywhere in the string."""
+    pattern = r'([A-Z]{1,2}[0-9][A-Z0-9]?\s?[0-9][A-Z]{2})'
+    match = re.search(pattern, text, re.IGNORECASE)
+    if match:
+        return match.group(1).upper()
+    return None
 
-def geocode_postcodes_bulk(postcode_list):
-    """Fast geocoder for actual postcodes."""
+def geocode_postcodes_bulk(postcode_map):
+    """Fast geocoder taking a dictionary of {Original_String: Extracted_Postcode}"""
     results = {}
     headers = {"Content-Type": "application/json"}
-    for i in range(0, len(postcode_list), 100):
-        chunk = postcode_list[i:i+100]
+    
+    unique_pcs = list(set(postcode_map.values()))
+    
+    for i in range(0, len(unique_pcs), 100):
+        chunk = unique_pcs[i:i+100]
         try:
             resp = requests.post("https://api.postcodes.io/postcodes", json={"postcodes": chunk}, headers=headers)
             if resp.status_code == 200:
                 data = resp.json().get('result', [])
+                
+                # Build a quick lookup for this chunk
+                pc_data_lookup = {}
                 for item in data:
                     if item['result']:
-                        pc = item['result']['postcode']
-                        district = item['result'].get('admin_district', '')
-                        results[item['query']] = {
-                            'lat': item['result']['latitude'],
-                            'lon': item['result']['longitude'],
-                            'full_address': f"{pc}, {district}".strip(', '),
-                            'postcode': pc
+                        pc_data_lookup[item['query']] = item['result']
+                        
+                # Match the exact coordinates back to the original string the user pasted
+                for original_str, extracted_pc in postcode_map.items():
+                    if extracted_pc in pc_data_lookup:
+                        res = pc_data_lookup[extracted_pc]
+                        
+                        # Clean up the output string to look nice on the manifest
+                        name_part = original_str.replace(extracted_pc, "").strip(" ,-")
+                        display_addr = f"{name_part}, {extracted_pc}, {res.get('admin_district', '')}".strip(" ,")
+                        
+                        if not name_part: 
+                             display_addr = f"{extracted_pc}, {res.get('admin_district', '')}".strip(" ,")
+                        
+                        results[original_str] = {
+                            'lat': res['latitude'],
+                            'lon': res['longitude'],
+                            'full_address': display_addr,
+                            'postcode': res['postcode']
                         }
         except Exception:
             pass
     return results
 
 def geocode_places_osm(place_list, progress_bar, status_text):
-    """Smart text-search geocoder for place names (Schools, Pubs, etc)."""
+    """Smart text-search geocoder for locations with NO postcode provided."""
     results = {}
     headers = {"User-Agent": "KEP_Print_Dispatch_Router/1.0"}
     
@@ -65,7 +86,6 @@ def geocode_places_osm(place_list, progress_bar, status_text):
         progress_bar.progress((idx + 1) / total)
         
         try:
-            # Connect to OpenStreetMap free API (Restricted to GB to ensure accuracy)
             url = f"https://nominatim.openstreetmap.org/search?q={place}&format=json&addressdetails=1&countrycodes=gb"
             resp = requests.get(url, headers=headers)
             if resp.status_code == 200:
@@ -74,7 +94,6 @@ def geocode_places_osm(place_list, progress_bar, status_text):
                     best_match = data[0]
                     addr = best_match.get('address', {})
                     pc = addr.get('postcode', 'N/A')
-                    # Clean up the display name for the manifest
                     full_addr = best_match.get('display_name', place)
                     
                     results[place] = {
@@ -83,7 +102,6 @@ def geocode_places_osm(place_list, progress_bar, status_text):
                         'full_address': full_addr,
                         'postcode': pc
                     }
-            # OpenStreetMap requires a 1-second delay between free searches
             time.sleep(1)
         except Exception:
             pass
@@ -97,7 +115,7 @@ with col_inputs:
     depot_postcode = st.text_input("Depot Postcode (Start & End)", value="B77 5AE")
     
     raw_locations = st.text_area("Paste Locations (Names or Postcodes)", height=250, 
-                                 placeholder="e.g.\nCV1 2HN\nTamworth High School\nM&S Banbury")
+                                 placeholder="e.g.\nCV1 2HN\nTamworth High School B77 3AA\nM&S Banbury")
     
     num_vans = st.slider("Number of Vans / Runs", min_value=1, max_value=5, value=1)
     
@@ -109,13 +127,23 @@ with col_map:
     if calculate_btn and raw_locations.strip():
         # Clean and split inputs
         raw_list = [p.strip() for p in raw_locations.split('\n') if p.strip()]
-        raw_list = list(set(raw_list)) # Remove duplicates
+        raw_list = list(set(raw_list)) 
         
-        pure_postcodes = [p for p in raw_list if is_postcode(p)]
-        place_names = [p for p in raw_list if not is_postcode(p)]
+        # Sort inputs via the Intelligent Scanner
+        with_postcodes_map = {} 
+        place_names_only = []
+        
+        for loc in raw_list:
+            found_pc = extract_postcode(loc)
+            if found_pc:
+                with_postcodes_map[loc] = found_pc
+            else:
+                place_names_only.append(loc)
         
         # Geocode the Depot first
-        depot_data = geocode_postcodes_bulk([depot_postcode])
+        depot_pc_extracted = extract_postcode(depot_postcode) or depot_postcode
+        depot_data = geocode_postcodes_bulk({depot_postcode: depot_pc_extracted})
+        
         if depot_postcode not in depot_data:
             st.error("Could not find the Depot postcode. Please check the format.")
             st.stop()
@@ -123,21 +151,20 @@ with col_map:
         depot_lat = depot_data[depot_postcode]['lat']
         depot_lon = depot_data[depot_postcode]['lon']
         
-        # Prepare the UI for progress tracking (because OpenStreetMap has a 1-sec delay)
         progress_container = st.empty()
         status_container = st.empty()
         
         drop_data = {}
         
-        # 1. Process standard postcodes instantly
-        if pure_postcodes:
-            status_container.text("Processing exact postcodes...")
-            drop_data.update(geocode_postcodes_bulk(pure_postcodes))
+        # 1. Process mixed strings and exact postcodes instantly
+        if with_postcodes_map:
+            status_container.text("Processing exact coordinates...")
+            drop_data.update(geocode_postcodes_bulk(with_postcodes_map))
             
-        # 2. Search for place names via OpenStreetMap
-        if place_names:
+        # 2. Search for abstract place names via OpenStreetMap
+        if place_names_only:
             pb = progress_container.progress(0)
-            drop_data.update(geocode_places_osm(place_names, pb, status_container))
+            drop_data.update(geocode_places_osm(place_names_only, pb, status_container))
             progress_container.empty()
             
         status_container.text("Calculating optimal driving routes...")
@@ -198,11 +225,10 @@ with col_map:
                 
             color = colors[van_id % len(colors)]
             
-            # Setup the depot block
             depot_block = {
                 'query': 'KEP DEPOT', 
                 'full_address': f'KEP Print Group, {depot_postcode}', 
-                'postcode': depot_postcode, 
+                'postcode': depot_pc_extracted, 
                 'lat': depot_lat, 'lon': depot_lon
             }
             
@@ -270,13 +296,11 @@ with col_map:
             except Exception as e:
                 st.error(f"Could not calculate exact road route for Van {van_id+1}.")
         
-        # Clear the status indicator
         status_container.empty()
         
         # --- RENDER TOP LEVEL METRICS & EXPORT ---
         st.divider()
         
-        # Create the Excel payload
         if master_itinerary:
             df_manifest = pd.DataFrame(master_itinerary)
             output = io.BytesIO()
