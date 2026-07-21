@@ -4,6 +4,7 @@ import requests
 import folium
 from sklearn.cluster import KMeans
 import numpy as np
+import io
 
 st.set_page_config(page_title="Route Planner", page_icon="🗺️", layout="wide")
 
@@ -97,7 +98,6 @@ with col_map:
             # Assign to vans (Clustering)
             van_assignments = {i: [] for i in range(num_vans)}
             
-            # Prevent K-Means crashing if there are more vans than drops
             actual_vans = min(num_vans, len(valid_drops))
             
             if actual_vans > 1:
@@ -122,18 +122,18 @@ with col_map:
             total_miles = 0
             total_hours = 0
             
+            # Master list to collect data for the Excel export
+            master_itinerary = []
+            
             for van_id, drops in van_assignments.items():
                 if not drops:
                     continue
                     
                 color = colors[van_id % len(colors)]
                 
-                # Setup OSRM string
-                # Format: lon,lat;lon,lat...
                 input_points = [{'postcode': 'KEP DEPOT', 'lat': depot_lat, 'lon': depot_lon}] + drops
                 coords_str = ";".join([f"{p['lon']},{p['lat']}" for p in input_points])
                 
-                # Hit the OSRM Trip API (Optimal TSP solver)
                 url = f"http://router.project-osrm.org/trip/v1/driving/{coords_str}?source=first&roundtrip=true&geometries=geojson"
                 try:
                     resp = requests.get(url)
@@ -143,14 +143,12 @@ with col_map:
                         route = data['trips'][0]
                         waypoints = data['waypoints']
                         
-                        # Extract metrics
-                        miles = route['distance'] / 1609.34 # meters to miles
-                        duration = route['duration'] / 3600 # seconds to hours
+                        miles = route['distance'] / 1609.34
+                        duration = route['duration'] / 3600 
                         
                         total_miles += miles
                         total_hours += duration
                         
-                        # Draw route line
                         geojson_shape = route['geometry']
                         folium.GeoJson(
                             geojson_shape,
@@ -158,13 +156,20 @@ with col_map:
                             style_function=lambda x, c=color: {'color': c, 'weight': 4, 'opacity': 0.8}
                         ).add_to(m)
                         
-                        # Parse the optimal sequence
                         for i, wp in enumerate(waypoints):
                             input_points[i]['sequence'] = wp['waypoint_index']
                             
                         optimized_drops = sorted(input_points, key=lambda x: x['sequence'])
                         
-                        # Draw markers and output table
+                        # Add to Excel Export List
+                        for i, p in enumerate(optimized_drops):
+                            master_itinerary.append({
+                                "Van / Run": f"Van {van_id+1}",
+                                "Stop Sequence": i + 1,
+                                "Location Type": "KEP Depot" if p['postcode'] == 'KEP DEPOT' else "Drop",
+                                "Postcode": p['postcode']
+                            })
+                        
                         st.markdown(f"### 🚐 Van {van_id+1} Itinerary")
                         st.write(f"**Est. Drive Time:** {int(duration)}h {int((duration % 1) * 60)}m | **Est. Mileage:** {miles:.1f} miles")
                         
@@ -174,7 +179,6 @@ with col_map:
                         })
                         st.dataframe(df_display, hide_index=True, use_container_width=True)
                         
-                        # Add markers to map
                         for i, p in enumerate(optimized_drops):
                             if p['postcode'] != 'KEP DEPOT':
                                 folium.Marker(
@@ -188,15 +192,29 @@ with col_map:
                 except Exception as e:
                     st.error(f"Could not calculate exact road route for Van {van_id+1}.")
             
-            # Render Top Level Metrics
+            # --- RENDER TOP LEVEL METRICS & EXPORT ---
             st.divider()
+            
+            # Create the Excel payload
+            if master_itinerary:
+                df_manifest = pd.DataFrame(master_itinerary)
+                output = io.BytesIO()
+                with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                    df_manifest.to_excel(writer, index=False, sheet_name='Optimized Routes')
+                
+                st.download_button(
+                    label="⬇️ Download Dispatch Order (Excel)",
+                    data=output.getvalue(),
+                    file_name="KEP_Route_Manifest.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                )
+
             m1, m2 = st.columns(2)
             with m1:
                 st.markdown(f"<div class='metric-card'><h4>Total Campaign Mileage</h4><p class='stat-text'>{total_miles:.1f} mi</p></div>", unsafe_allow_html=True)
             with m2:
                 st.markdown(f"<div class='metric-card'><h4>Total Driving Time</h4><p class='stat-text'>{int(total_hours)}h {int((total_hours % 1) * 60)}m</p></div>", unsafe_allow_html=True)
                 
-            # Render the Map via HTML string (no extra components needed)
             st.components.v1.html(m._repr_html_(), height=600)
 
     elif not calculate_btn:
