@@ -19,6 +19,7 @@ st.markdown("""
     .stat-text { color: #004B87; font-size: 28px; font-weight: bold; margin: 0; }
     .stButton>button { background-color: #004B87; color: white; border-radius: 4px; font-weight: bold; padding: 12px; width: 100%; border: none; font-size: 16px;}
     .stButton>button:hover { background-color: #003666; color: white; }
+    .section-header { color: #004B87; margin-top: 10px; margin-bottom: 10px; font-weight: 600; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -102,22 +103,32 @@ def geocode_places_osm(place_list, progress_bar, status_text):
 col_inputs, col_map = st.columns([1, 2], gap="large")
 
 with col_inputs:
-    st.subheader("1. Route Details")
+    st.markdown("<h3 class='section-header'>📍 1. Route Details</h3>", unsafe_allow_html=True)
     depot_postcode = st.text_input("Depot Postcode (Start & End)", value="B77 5AE")
     
-    raw_locations = st.text_area("Paste Locations (Names or Postcodes)", height=250, 
+    raw_locations = st.text_area("Paste Locations (Names or Postcodes)", height=180, 
                                  placeholder="e.g.\nCV1 2HN\nTamworth High School B77 3AA\nM&S Banbury")
     num_vans = st.slider("Number of Vans / Runs", min_value=1, max_value=5, value=1)
     
-    st.subheader("2. Delivery Note Data")
-    job_number = st.text_input("Job Number", placeholder="e.g. 355814")
-    job_desc = st.text_input("Job Title / Description", placeholder="e.g. Perm POS - Hand Washing...")
-    job_qty = st.text_input("Quantity Delivered", placeholder="e.g. 300 (Leave blank for none)")
+    st.markdown("<hr style='margin: 10px 0;'>", unsafe_allow_html=True)
     
+    st.markdown("<h3 class='section-header'>📝 2. Delivery Note Data</h3>", unsafe_allow_html=True)
+    
+    # Use side-by-side layout for smaller inputs to save vertical space
+    col_dn1, col_dn2 = st.columns(2)
+    with col_dn1:
+        job_number = st.text_input("Job Number", placeholder="e.g. 355814")
+        delivery_date = st.date_input("Delivery Date", datetime.date.today())
+    with col_dn2:
+        job_qty = st.text_input("Quantity Delivered", placeholder="e.g. 300 (Blank for none)")
+        
+    job_desc = st.text_input("Job Title / Description", placeholder="e.g. Perm POS - Hand Washing...")
+    
+    st.markdown("<br>", unsafe_allow_html=True)
     calculate_btn = st.button("🗺️ Optimize Route & Generate Docs")
 
 with col_map:
-    st.subheader("3. Itinerary & Map")
+    st.markdown("<h3 class='section-header'>🗺️ 3. Itinerary & Map</h3>", unsafe_allow_html=True)
     
     if calculate_btn and raw_locations.strip():
         raw_list = [p.strip() for p in raw_locations.split('\n') if p.strip()]
@@ -302,7 +313,9 @@ with col_map:
             if valid_drops_for_pdf:
                 pdf = FPDF()
                 pdf.set_auto_page_break(auto=True, margin=15)
-                today = datetime.datetime.now().strftime("%d/%m/%Y")
+                
+                # Format the chosen date directly from the UI Date Picker
+                delivery_date_str = delivery_date.strftime("%d/%m/%Y")
                 
                 for row in valid_drops_for_pdf:
                     address = row['Full Completed Address']
@@ -353,8 +366,8 @@ with col_map:
                         ref_no = f"{job_number}-{row['Stop Sequence']}" if job_number else f"SEQ-{row['Stop Sequence']}"
                         
                         info_row("Delivery Note No.", ref_no)
-                        info_row("Delivery Date:", today)
-                        info_row("Delivery Method", "Into Fulfilment")
+                        info_row("Delivery Date:", delivery_date_str)
+                        info_row("Delivery Method", "KEP Van")
                         info_row("Job Number", job_number)
                         info_row("Customer Reference", "")
                         info_row("Consignment No", "")
