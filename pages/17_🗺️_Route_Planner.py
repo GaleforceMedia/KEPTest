@@ -18,7 +18,6 @@ st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;800&display=swap');
 
-    /* Global Font & App Clean up */
     html, body, [class*="css"] {
         font-family: 'Montserrat', sans-serif !important;
     }
@@ -26,7 +25,6 @@ st.markdown("""
     footer {visibility: hidden;}
     header {visibility: hidden;}
 
-    /* Custom Header Banner */
     .kep-banner {
         background-color: white;
         padding: 2rem 2.5rem;
@@ -50,7 +48,6 @@ st.markdown("""
         font-weight: 400;
     }
 
-    /* Section Headers */
     .section-header {
         color: #004B87;
         font-weight: 800;
@@ -63,7 +60,6 @@ st.markdown("""
         letter-spacing: 0.5px;
     }
 
-    /* Floating Metric Cards */
     .metric-card {
         background: white;
         padding: 24px;
@@ -74,66 +70,39 @@ st.markdown("""
         margin-bottom: 20px;
         transition: transform 0.2s ease;
     }
-    .metric-card:hover {
-        transform: translateY(-2px);
-    }
+    .metric-card:hover { transform: translateY(-2px); }
     .metric-card h4 {
-        margin: 0 0 8px 0;
-        color: #8898aa;
-        font-size: 0.9rem;
-        font-weight: 600;
-        text-transform: uppercase;
-        letter-spacing: 1px;
+        margin: 0 0 8px 0; color: #8898aa; font-size: 0.9rem;
+        font-weight: 600; text-transform: uppercase; letter-spacing: 1px;
     }
-    .stat-text {
-        color: #004B87;
-        font-size: 32px;
-        font-weight: 800;
-        margin: 0;
-    }
+    .stat-text { color: #004B87; font-size: 32px; font-weight: 800; margin: 0; }
 
-    /* Form Inputs Overrides */
     .stTextInput>div>div>input, .stTextArea>div>div>textarea, .stDateInput>div>div>input {
-        border: 1px solid #cbd5e0 !important;
-        border-radius: 6px !important;
-        background-color: #f8fafc !important;
-        transition: all 0.2s ease;
+        border: 1px solid #cbd5e0 !important; border-radius: 6px !important;
+        background-color: #f8fafc !important; transition: all 0.2s ease;
     }
     .stTextInput>div>div>input:focus, .stTextArea>div>div>textarea:focus, .stDateInput>div>div>input:focus {
-        border-color: #004B87 !important;
-        background-color: white !important;
+        border-color: #004B87 !important; background-color: white !important;
         box-shadow: 0 0 0 1px #004B87 !important;
     }
 
-    /* Primary Action Button */
     .stButton>button {
         background: linear-gradient(135deg, #004B87 0%, #002D54 100%);
-        color: white !important;
-        border-radius: 8px;
-        font-weight: 600 !important;
-        padding: 0.8rem 1.5rem;
-        width: 100%;
-        border: none;
-        font-size: 1.1rem;
-        box-shadow: 0 4px 14px rgba(0, 75, 135, 0.25);
-        transition: all 0.3s ease;
+        color: white !important; border-radius: 8px; font-weight: 600 !important;
+        padding: 0.8rem 1.5rem; width: 100%; border: none; font-size: 1.1rem;
+        box-shadow: 0 4px 14px rgba(0, 75, 135, 0.25); transition: all 0.3s ease;
     }
     .stButton>button:hover {
         background: linear-gradient(135deg, #00569b 0%, #003666 100%);
-        box-shadow: 0 6px 20px rgba(0, 75, 135, 0.4);
-        transform: translateY(-1px);
+        box-shadow: 0 6px 20px rgba(0, 75, 135, 0.4); transform: translateY(-1px);
     }
 
-    /* Secondary Download Buttons */
     [data-testid="stDownloadButton"]>button {
-        background: white !important;
-        color: #004B87 !important;
-        border: 2px solid #004B87 !important;
-        box-shadow: none !important;
+        background: white !important; color: #004B87 !important;
+        border: 2px solid #004B87 !important; box-shadow: none !important;
     }
     [data-testid="stDownloadButton"]>button:hover {
-        background: #f0f7fd !important;
-        transform: none !important;
+        background: #f0f7fd !important; transform: none !important;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -378,7 +347,7 @@ with col_map:
                 st.download_button("⬇️ Download Route Manifest (.xlsx)", excel_out.getvalue(), 
                                    "KEP_Intelligent_Route_Manifest.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
-            # PDF EXPORT
+            # PDF EXPORT (FULLY BRANDED)
             valid_drops_for_pdf = [r for r in master_itinerary if r['Original Search'] != 'KEP DEPOT']
             if valid_drops_for_pdf:
                 pdf = FPDF()
@@ -387,70 +356,132 @@ with col_map:
                 
                 for row in valid_drops_for_pdf:
                     address = row['Full Completed Address']
-                    for copy_type in ["Driver Copy", "Customer Copy"]:
+                    for copy_type in ["DRIVER COPY", "CUSTOMER COPY"]:
                         pdf.add_page()
                         
-                        try: pdf.image("keplogo.png", x=10, y=10, w=40)
+                        # --- HEADER BLOCK ---
+                        try:
+                            pdf.image("keplogo.png", x=10, y=10, w=45)
                         except Exception:
-                            try: pdf.image("keplogo.svg", x=10, y=10, w=40)
+                            try:
+                                pdf.image("keplogo.svg", x=10, y=10, w=45)
                             except Exception:
                                 pdf.set_font("helvetica", "B", 24)
                                 pdf.set_text_color(0, 75, 135)
-                                pdf.cell(0, 10, "KEP PRINT GROUP", ln=True, align="L")
-                                pdf.set_text_color(0, 0, 0)
-                                
-                        pdf.ln(15)
-                        pdf.set_font("helvetica", "B", 14)
+                                pdf.cell(0, 10, "KEP PRINT GROUP", ln=0, align="L")
+                        
+                        pdf.set_font("helvetica", "B", 24)
+                        pdf.set_text_color(0, 75, 135) # KEP Blue
+                        pdf.set_xy(100, 15)
+                        pdf.cell(100, 10, "DELIVERY NOTE", ln=0, align="R")
+                        
+                        pdf.set_font("helvetica", "B", 12)
+                        pdf.set_text_color(120, 120, 120)
+                        pdf.set_xy(100, 25)
+                        pdf.cell(100, 6, copy_type, ln=1, align="R")
+                        
+                        pdf.ln(10)
+                        pdf.set_draw_color(0, 75, 135)
+                        pdf.set_line_width(0.6)
+                        pdf.line(10, 38, 200, 38)
+                        pdf.set_line_width(0.2)
+                        
+                        # --- ADDRESS & METADATA GRID ---
+                        pdf.set_y(45)
+                        pdf.set_font("helvetica", "B", 11)
+                        pdf.set_text_color(0, 75, 135)
+                        pdf.cell(100, 6, "DELIVER TO:", ln=0)
+                        pdf.cell(90, 6, "DELIVERY DETAILS:", ln=1)
+                        
+                        start_y = pdf.get_y()
+                        
+                        # Left Col: Address
+                        pdf.set_font("helvetica", "", 10)
                         pdf.set_text_color(0, 0, 0)
-                        pdf.cell(0, 10, f"Delivery Note - {copy_type}", ln=True, align="L")
-                        pdf.ln(5)
-                        
-                        pdf.set_font("helvetica", "B", 10)
-                        pdf.cell(0, 6, "Deliver to", ln=True)
-                        pdf.set_font("helvetica", "", 10)
+                        pdf.set_xy(10, start_y)
                         for part in address.split(','):
-                            if part.strip(): pdf.cell(0, 5, part.strip(), ln=True)
-                        pdf.ln(8)
+                            if part.strip(): 
+                                pdf.cell(90, 5, part.strip(), ln=2)
                         
-                        col1, col2 = 45, 100
-                        def info_row(label, val):
-                            pdf.set_font("helvetica", "B", 10)
-                            pdf.cell(col1, 8, label, border=1)
-                            pdf.set_font("helvetica", "", 10)
-                            pdf.cell(col2, 8, str(val), border=1, ln=True)
-
+                        # Right Col: Meta Data
+                        pdf.set_xy(110, start_y)
                         ref_no = f"{job_number}-{row['Stop Sequence']}" if job_number else f"SEQ-{row['Stop Sequence']}"
-                        info_row("Delivery Note No.", ref_no)
-                        info_row("Delivery Date:", delivery_date_str)
-                        info_row("Delivery Method", "KEP Van")
-                        info_row("Job Number", job_number)
-                        info_row("Customer Reference", "")
-                        info_row("Consignment No", "")
-                        pdf.ln(8)
                         
+                        meta_data = [
+                            ("Note No:", ref_no),
+                            ("Date:", delivery_date_str),
+                            ("Method:", "KEP Van"),
+                            ("Job No:", job_number),
+                            ("Cust Ref:", ""),
+                            ("Consignment:", "")
+                        ]
+                        
+                        for label, val in meta_data:
+                            pdf.set_x(110)
+                            pdf.set_font("helvetica", "B", 9)
+                            pdf.set_text_color(100, 100, 100)
+                            pdf.cell(25, 5, label, border=0)
+                            pdf.set_font("helvetica", "", 9)
+                            pdf.set_text_color(0, 0, 0)
+                            pdf.cell(65, 5, str(val), border=0, ln=1)
+                            
+                        # --- ITEMS TABLE ---
+                        # Table Header (Blue Fill)
+                        pdf.set_y(max(pdf.get_y(), 95))
+                        pdf.set_fill_color(0, 75, 135)
+                        pdf.set_text_color(255, 255, 255)
+                        pdf.set_draw_color(0, 75, 135)
                         pdf.set_font("helvetica", "B", 9)
-                        pdf.cell(100, 8, "Job Title", border=1)
-                        pdf.cell(30, 8, "Quantity Delivered", border=1, align="C")
-                        pdf.cell(20, 8, "No. of", border=1, align="C")
-                        pdf.cell(30, 8, "Quantity per Unit", border=1, ln=True, align="C")
+                        pdf.cell(100, 8, " Job Title / Description", border=1, fill=True)
+                        pdf.cell(30, 8, "Qty Delivered", border=1, align="C", fill=True)
+                        pdf.cell(30, 8, "No. of", border=1, align="C", fill=True)
+                        pdf.cell(30, 8, "Qty per Unit", border=1, ln=1, align="C", fill=True)
                         
+                        # Table Row
+                        pdf.set_text_color(0, 0, 0)
+                        pdf.set_draw_color(200, 200, 200)
                         pdf.set_font("helvetica", "", 9)
-                        pdf.cell(100, 8, str(job_desc), border=1)
-                        pdf.cell(30, 8, str(job_qty) if job_qty else "", border=1, align="C")
-                        pdf.cell(20, 8, "0", border=1, align="C")
-                        pdf.cell(30, 8, "0", border=1, ln=True, align="C")
+                        pdf.cell(100, 10, f" {job_desc}", border=1)
+                        pdf.cell(30, 10, str(job_qty) if job_qty else "", border=1, align="C")
+                        pdf.cell(30, 10, "0", border=1, align="C")
+                        pdf.cell(30, 10, "0", border=1, ln=1, align="C")
                         
-                        pdf.ln(20)
+                        # --- SIGNATURE BOX ---
+                        pdf.ln(25)
+                        pdf.set_fill_color(248, 249, 250)
+                        pdf.set_draw_color(220, 220, 220)
+                        box_y = pdf.get_y()
+                        pdf.rect(10, box_y, 190, 40, style="DF")
+                        
+                        pdf.set_xy(15, box_y + 5)
                         pdf.set_font("helvetica", "B", 10)
-                        pdf.cell(0, 8, "Goods received in good condition", ln=True)
-                        pdf.set_font("helvetica", "", 10)
-                        pdf.cell(0, 8, "Print Name: ___________________________", ln=True)
-                        pdf.cell(0, 8, "Signature:  ___________________________", ln=True)
-                        pdf.cell(0, 8, "Date:       ___________________________", ln=True)
+                        pdf.set_text_color(0, 75, 135)
+                        pdf.cell(0, 6, "GOODS RECEIVED IN GOOD CONDITION", ln=1)
                         
-                        pdf.set_y(-30)
-                        pdf.set_font("helvetica", "I", 9)
-                        pdf.cell(0, 10, f"In case of queries please call 01827 280880 and quote the following reference number {ref_no}", ln=True, align="L")
+                        pdf.ln(2)
+                        pdf.set_text_color(0, 0, 0)
+                        pdf.set_font("helvetica", "B", 9)
+                        
+                        pdf.set_x(15)
+                        pdf.cell(20, 8, "Print Name:")
+                        pdf.line(35, pdf.get_y()+6, 100, pdf.get_y()+6)
+                        pdf.ln(10)
+                        
+                        pdf.set_x(15)
+                        pdf.cell(20, 8, "Signature:")
+                        pdf.line(35, pdf.get_y()+6, 100, pdf.get_y()+6)
+                        
+                        pdf.set_xy(120, pdf.get_y())
+                        pdf.cell(10, 8, "Date:")
+                        pdf.line(130, pdf.get_y()+6, 190, pdf.get_y()+6)
+                        
+                        # --- FOOTER ---
+                        pdf.set_y(-25)
+                        pdf.set_font("helvetica", "", 9)
+                        pdf.set_text_color(100, 100, 100)
+                        pdf.cell(0, 5, "KEP Print Group | Two Gates Trading Estate, Tamworth B77 5AE | www.kep.co.uk", align="C", ln=1)
+                        pdf.set_font("helvetica", "I", 8)
+                        pdf.cell(0, 5, f"In case of queries please call 01827 280880 and quote reference {ref_no}", align="C", ln=1)
                         
                 try: pdf_bytes = bytes(pdf.output())
                 except Exception: pdf_bytes = pdf.output(dest="S").encode("latin-1")
