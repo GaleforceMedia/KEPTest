@@ -42,7 +42,7 @@ st.markdown("""
     .metric-card h4 { margin: 0 0 8px 0; color: #8898aa; font-size: 0.9rem; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; }
     .stat-text { color: #004B87; font-size: 32px; font-weight: 800; margin: 0; }
 
-    .stTextInput>div>div>input, .stTextArea>div>div>textarea, .stDateInput>div>div>input, .stNumberInput>div>div>input {
+    .stTextInput>div>div>input, .stTextArea>div>div>textarea, .stDateInput>div>div>input, .stNumberInput>div>div>input, .stSelectbox>div>div>div {
         border: 1px solid #cbd5e0 !important; border-radius: 6px !important; background-color: #f8fafc !important; transition: all 0.2s ease;
     }
     .stTextInput>div>div>input:focus, .stTextArea>div>div>textarea:focus, .stDateInput>div>div>input:focus, .stNumberInput>div>div>input:focus {
@@ -68,35 +68,23 @@ if logo_path:
     st.image(logo_path, width=180)
 st.markdown("""
     <h1>Intelligent Fleet Router</h1>
-    <p>Automatically scales your fleet to minimize costs while respecting legal shift hours and vehicle weight capacities.</p>
+    <p>Automatically scales your fleet to minimize costs while respecting legal shift hours and vehicle capacities.</p>
     </div>
 """, unsafe_allow_html=True)
 
 # --- HELPER FUNCTIONS ---
 def extract_location_data(text):
-    """Extracts postcode and weight (if present) from a line."""
     text = text.strip()
     pc_pattern = r'([A-Z]{1,2}[0-9][A-Z0-9]?\s?[0-9][A-Z]{2})'
     weight = 0.0
     
-    # Check for weight declarations (e.g. , 250kg or : 400)
-    if ',' in text:
-        parts = text.split(',')
-        wm = re.match(r'^([0-9]+(?:\.[0-9]+)?)\s*(?:kg|kilos)?$', parts[-1].strip(), re.IGNORECASE)
-        if wm:
-            weight = float(wm.group(1))
-            text = ','.join(parts[:-1]).strip()
-    elif ':' in text:
-        parts = text.split(':')
-        wm = re.match(r'^([0-9]+(?:\.[0-9]+)?)\s*(?:kg|kilos)?$', parts[-1].strip(), re.IGNORECASE)
-        if wm:
-            weight = float(wm.group(1))
-            text = ':'.join(parts[:-1]).strip()
-    else:
-        wm = re.search(r'\s+([0-9]+(?:\.[0-9]+)?)\s*(?:kg|kilos)$', text, re.IGNORECASE)
-        if wm:
-            weight = float(wm.group(1))
-            text = text[:wm.start()].strip()
+    w_pattern = r'(?:([,:\|\-])\s*([0-9]+(?:\.[0-9]+)?)\s*(?:kg|kilos)?|\b([0-9]+(?:\.[0-9]+)?)\s*(?:kg|kilos))\s*$'
+    w_match = re.search(w_pattern, text, re.IGNORECASE)
+    
+    if w_match:
+        weight_str = w_match.group(2) if w_match.group(2) else w_match.group(3)
+        weight = float(weight_str)
+        text = text[:w_match.start()].strip(" ,:-|")
             
     pc_match = re.search(pc_pattern, text, re.IGNORECASE)
     pc = pc_match.group(1).upper() if pc_match else None
@@ -153,7 +141,6 @@ def geocode_places_osm(place_list, progress_bar, status_text):
     return results
 
 def capacitated_clustering(points, k, max_weight, force_assign=False):
-    """Knapsack-style algorithm to ensure clusters do not exceed vehicle payloads."""
     if k == 1:
         total = sum(p['weight'] for p in points)
         return {0: points}, (total <= max_weight or force_assign)
@@ -166,7 +153,6 @@ def capacitated_clustering(points, k, max_weight, force_assign=False):
     assignments = {i: [] for i in range(k)}
     weights = {i: 0.0 for i in range(k)}
     
-    # Sort drops by heaviest first to pack large items efficiently
     sorted_points = sorted(points, key=lambda x: x['weight'], reverse=True)
     
     success = True
@@ -186,7 +172,6 @@ def capacitated_clustering(points, k, max_weight, force_assign=False):
         if not assigned:
             success = False
             if force_assign:
-                # If we've maxed out vans, just force it into the closest geographic van
                 best_c = sorted_centers[0]
                 assignments[best_c].append(p)
                 weights[best_c] += p['weight']
@@ -194,6 +179,102 @@ def capacitated_clustering(points, k, max_weight, force_assign=False):
                 return assignments, False
                 
     return assignments, success
+
+def generate_pallet_labels(master_itinerary, labels_per_addr, template_type, job_number, job_desc):
+    pdf = FPDF()
+    pdf.set_auto_page_break(auto=False)
+    
+    # Configure A4 Grid based on user selection
+    if template_type == "1 Up":
+        cols, rows = 1, 1
+        w, h = 190, 277
+        start_x, start_y = 10, 10
+        gap_x, gap_y = 0, 0
+    elif template_type == "2 Up":
+        cols, rows = 1, 2
+        w, h = 190, 138
+        start_x, start_y = 10, 10
+        gap_x, gap_y = 0, 5
+    elif template_type == "10 Up":
+        cols, rows = 2, 5
+        w, h = 95, 55
+        start_x, start_y = 10, 10
+        gap_x, gap_y = 5, 5
+    else: # "21 Up"
+        cols, rows = 3, 7
+        w, h = 63.5, 38.1
+        start_x, start_y = 7, 13
+        gap_x, gap_y = 2.5, 0
+
+    # Expand list based on required quantity per drop
+    labels = []
+    for row in master_itinerary:
+        if row['Original Search'] != 'KEP DEPOT':
+            for _ in range(labels_per_addr):
+                labels.append(row)
+    
+    labels_per_page = cols * rows
+    
+    for i, lbl in enumerate(labels):
+        if i % labels_per_page == 0:
+            pdf.add_page()
+        
+        idx_on_page = i % labels_per_page
+        col = idx_on_page % cols
+        row_idx = idx_on_page // cols
+        
+        x = start_x + col * (w + gap_x)
+        y = start_y + row_idx * (h + gap_y)
+        
+        pdf.set_draw_color(200, 200, 200)
+        pdf.rect(x, y, w, h)
+        pdf.set_xy(x + 3, y + 3)
+        
+        if template_type in ["1 Up", "2 Up"]:
+            pdf.set_font("helvetica", "B", 16)
+            pdf.cell(w-6, 8, f"KEP PRINT GROUP", ln=2)
+            pdf.set_font("helvetica", "", 12)
+            pdf.cell(w-6, 6, f"Job: {job_number} - {job_desc}", ln=2)
+            pdf.ln(4)
+            pdf.set_font("helvetica", "B", 14)
+            pdf.cell(w-6, 8, "DELIVER TO:", ln=2)
+            pdf.set_font("helvetica", "", 12)
+            for part in lbl['Full Completed Address'].split(','):
+                if part.strip():
+                    pdf.cell(w-6, 6, part.strip(), ln=2)
+            
+            # Corporate Tagline at bottom of large formats
+            pdf.set_xy(x + 3, y + h - 10)
+            pdf.set_font("helvetica", "I", 10)
+            pdf.set_text_color(0, 75, 135)
+            pdf.cell(w-6, 6, "Print Just Perfected.", align="C")
+            pdf.set_text_color(0, 0, 0)
+            
+        elif template_type == "10 Up":
+            pdf.set_font("helvetica", "B", 10)
+            pdf.cell(w-6, 5, f"Job: {job_number}", ln=2)
+            pdf.set_font("helvetica", "", 8)
+            pdf.cell(w-6, 4, f"{job_desc[:40]}", ln=2)
+            pdf.ln(2)
+            pdf.set_font("helvetica", "B", 9)
+            pdf.cell(w-6, 5, "DELIVER TO:", ln=2)
+            pdf.set_font("helvetica", "", 8)
+            for part in lbl['Full Completed Address'].split(',')[:4]:
+                if part.strip():
+                    pdf.cell(w-6, 4, part.strip()[:40], ln=2)
+                    
+        else: # 21 Up
+            pdf.set_font("helvetica", "B", 8)
+            pdf.cell(w-6, 4, f"Job: {job_number}", ln=2)
+            pdf.set_font("helvetica", "B", 7)
+            pdf.cell(w-6, 3, "DELIVER TO:", ln=2)
+            pdf.set_font("helvetica", "", 7)
+            for part in lbl['Full Completed Address'].split(',')[:3]:
+                if part.strip():
+                    pdf.cell(w-6, 3, part.strip()[:35], ln=2)
+
+    try: return bytes(pdf.output())
+    except Exception: return pdf.output(dest="S").encode("latin-1")
 
 # --- INTERFACE ---
 col_inputs, col_map = st.columns([1, 2], gap="large")
@@ -206,10 +287,8 @@ with col_inputs:
                                  placeholder="e.g.\nCV1 2HN, 250\nTamworth High School B77 3AA\nM&S Banbury: 400kg")
     
     col_f1, col_f2 = st.columns(2)
-    with col_f1:
-        max_vans = st.slider("Max Available Vans", min_value=1, max_value=5, value=3)
-    with col_f2:
-        max_weight = st.number_input("Max Weight / Van (kg)", value=1000, step=100)
+    with col_f1: max_vans = st.slider("Max Available Vans", min_value=1, max_value=5, value=3)
+    with col_f2: max_weight = st.number_input("Max Weight / Van (kg)", value=1000, step=100)
     
     st.markdown("<h3 class='section-header'>📝 Manifest Data</h3>", unsafe_allow_html=True)
     col_dn1, col_dn2 = st.columns(2)
@@ -219,6 +298,13 @@ with col_inputs:
     with col_dn2:
         job_qty = st.text_input("Quantity Delivered", placeholder="e.g. 300")
     job_desc = st.text_input("Job Title / Description", placeholder="e.g. Perm POS - Hand Washing...")
+    
+    st.markdown("<h3 class='section-header'>🏷️ Label Configuration</h3>", unsafe_allow_html=True)
+    col_lbl1, col_lbl2 = st.columns(2)
+    with col_lbl1:
+        lbl_qty = st.number_input("Labels per Address", min_value=1, value=1)
+    with col_lbl2:
+        lbl_format = st.selectbox("Label Template", ["1 Up", "2 Up", "10 Up", "21 Up"])
     
     st.markdown("<br>", unsafe_allow_html=True)
     calculate_btn = st.button("🗺️ Optimize Fleet & Generate Docs")
@@ -281,8 +367,8 @@ with col_map:
             st.stop()
 
         # --- FLEET OPTIMIZER ENGINE ---
-        DROP_TIME_HOURS = 15 / 60.0  # 15 mins allowed per drop
-        FLEX_LIMIT_HOURS = 11.5      # 10h target + buffer
+        DROP_TIME_HOURS = 15 / 60.0  
+        FLEX_LIMIT_HOURS = 11.5      
         
         best_routes_data = {}
         optimal_vans_used = 1
@@ -292,13 +378,10 @@ with col_map:
             actual_k = min(k, len(valid_drops))
             is_last_attempt = (k == max_vans)
             
-            # 1. Weight Capacity Check
             temp_assignments, weight_ok = capacitated_clustering(valid_drops, actual_k, max_weight, force_assign=is_last_attempt)
             
-            if not weight_ok and not is_last_attempt:
-                continue 
+            if not weight_ok and not is_last_attempt: continue 
                 
-            # 2. Shift Duration Check via OSRM
             plan_valid = True
             temp_routes_data = {}
             max_van_time_in_plan = 0
@@ -323,8 +406,7 @@ with col_map:
                         miles = route['distance'] / 1609.34
                         total_shift_time = drive_hours + (len(drops) * DROP_TIME_HOURS)
                         
-                        if total_shift_time > max_van_time_in_plan:
-                            max_van_time_in_plan = total_shift_time
+                        if total_shift_time > max_van_time_in_plan: max_van_time_in_plan = total_shift_time
                             
                         temp_routes_data[van_id] = {
                             'route_geom': route['geometry'], 'waypoints': data['waypoints'],
@@ -334,7 +416,6 @@ with col_map:
                     else: plan_valid = False
                 except Exception: plan_valid = False
             
-            # Decision Matrix
             if plan_valid and max_van_time_in_plan <= FLEX_LIMIT_HOURS:
                 best_routes_data = temp_routes_data
                 optimal_vans_used = actual_k
@@ -400,27 +481,27 @@ with col_map:
         
         st.markdown("<br>", unsafe_allow_html=True)
         m1, m2 = st.columns(2)
-        with m1:
-            st.markdown(f"<div class='metric-card'><h4>Total Campaign Mileage</h4><p class='stat-text'>{total_miles:.1f} mi</p></div>", unsafe_allow_html=True)
-        with m2:
-            st.markdown(f"<div class='metric-card'><h4>Total Driving Time</h4><p class='stat-text'>{int(total_hours)}h {int((total_hours % 1) * 60)}m</p></div>", unsafe_allow_html=True)
+        with m1: st.markdown(f"<div class='metric-card'><h4>Total Campaign Mileage</h4><p class='stat-text'>{total_miles:.1f} mi</p></div>", unsafe_allow_html=True)
+        with m2: st.markdown(f"<div class='metric-card'><h4>Total Driving Time</h4><p class='stat-text'>{int(total_hours)}h {int((total_hours % 1) * 60)}m</p></div>", unsafe_allow_html=True)
             
         st.components.v1.html(m._repr_html_(), height=550)
         
         st.markdown("<h3 class='section-header'>📥 Export Documentation</h3>", unsafe_allow_html=True)
-        dl_col1, dl_col2 = st.columns(2)
+        
+        # Switched to 3 columns to fit the new Labels button
+        dl_col1, dl_col2, dl_col3 = st.columns(3)
         
         if master_itinerary:
-            # EXCEL EXPORT
+            # 1. EXCEL EXPORT
             df_manifest = pd.DataFrame(master_itinerary)
             excel_out = io.BytesIO()
             with pd.ExcelWriter(excel_out, engine='openpyxl') as writer:
                 df_manifest.to_excel(writer, index=False, sheet_name='Optimized Routes')
             with dl_col1:
-                st.download_button("⬇️ Download Route Manifest (.xlsx)", excel_out.getvalue(), 
+                st.download_button("⬇️ Route Manifest (.xlsx)", excel_out.getvalue(), 
                                    "KEP_Intelligent_Route_Manifest.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
-            # PDF EXPORT (FULLY BRANDED)
+            # 2. PDF EXPORT (DELIVERY NOTES)
             valid_drops_for_pdf = [r for r in master_itinerary if r['Original Search'] != 'KEP DEPOT']
             if valid_drops_for_pdf:
                 pdf = FPDF()
@@ -431,7 +512,6 @@ with col_map:
                     address = row['Full Completed Address']
                     for copy_type in ["DRIVER COPY", "CUSTOMER COPY"]:
                         pdf.add_page()
-                        
                         try: pdf.image("keplogo.png", x=10, y=10, w=45)
                         except Exception:
                             try: pdf.image("keplogo.svg", x=10, y=10, w=45)
@@ -463,13 +543,11 @@ with col_map:
                         pdf.cell(90, 6, "DELIVERY DETAILS:", ln=1)
                         
                         start_y = pdf.get_y()
-                        
                         pdf.set_font("helvetica", "", 10)
                         pdf.set_text_color(0, 0, 0)
                         pdf.set_xy(10, start_y)
                         for part in address.split(','):
-                            if part.strip(): 
-                                pdf.cell(90, 5, part.strip(), ln=2)
+                            if part.strip(): pdf.cell(90, 5, part.strip(), ln=2)
                         
                         pdf.set_xy(110, start_y)
                         ref_no = f"{job_number}-{row['Stop Sequence']}" if job_number else f"SEQ-{row['Stop Sequence']}"
@@ -543,8 +621,14 @@ with col_map:
                 except Exception: pdf_bytes = pdf.output(dest="S").encode("latin-1")
                     
                 with dl_col2:
-                    st.download_button("⬇️ Download Delivery Notes (.pdf)", pdf_bytes, 
+                    st.download_button("⬇️ Delivery Notes (.pdf)", pdf_bytes, 
                                        f"KEP_Delivery_Notes_{job_number}.pdf" if job_number else "KEP_Delivery_Notes.pdf", "application/pdf")
+            
+            # 3. PDF EXPORT (PALLET LABELS)
+            labels_pdf_bytes = generate_pallet_labels(master_itinerary, lbl_qty, lbl_format, job_number, job_desc)
+            with dl_col3:
+                st.download_button("⬇️ Pallet Labels (.pdf)", labels_pdf_bytes, 
+                                   f"KEP_Labels_{job_number}.pdf" if job_number else "KEP_Labels.pdf", "application/pdf")
 
     elif not calculate_btn:
         st.info("👈 Set your parameters and locations, then compile to generate the KEP logistics plan.")
