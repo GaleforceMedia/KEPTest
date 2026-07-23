@@ -42,10 +42,10 @@ st.markdown("""
     .metric-card h4 { margin: 0 0 8px 0; color: #8898aa; font-size: 0.9rem; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; }
     .stat-text { color: #004B87; font-size: 32px; font-weight: 800; margin: 0; }
 
-    .stTextInput>div>div>input, .stTextArea>div>div>textarea, .stDateInput>div>div>input {
+    .stTextInput>div>div>input, .stTextArea>div>div>textarea, .stDateInput>div>div>input, .stNumberInput>div>div>input {
         border: 1px solid #cbd5e0 !important; border-radius: 6px !important; background-color: #f8fafc !important; transition: all 0.2s ease;
     }
-    .stTextInput>div>div>input:focus, .stTextArea>div>div>textarea:focus, .stDateInput>div>div>input:focus {
+    .stTextInput>div>div>input:focus, .stTextArea>div>div>textarea:focus, .stDateInput>div>div>input:focus, .stNumberInput>div>div>input:focus {
         border-color: #004B87 !important; background-color: white !important; box-shadow: 0 0 0 1px #004B87 !important;
     }
 
@@ -68,16 +68,40 @@ if logo_path:
     st.image(logo_path, width=180)
 st.markdown("""
     <h1>Intelligent Fleet Router</h1>
-    <p>Automatically scales your fleet to minimize costs while generating driver manifests and delivery notes.</p>
+    <p>Automatically scales your fleet to minimize costs while respecting legal shift hours and vehicle weight capacities.</p>
     </div>
 """, unsafe_allow_html=True)
 
 # --- HELPER FUNCTIONS ---
-def extract_postcode(text):
-    pattern = r'([A-Z]{1,2}[0-9][A-Z0-9]?\s?[0-9][A-Z]{2})'
-    match = re.search(pattern, text, re.IGNORECASE)
-    if match: return match.group(1).upper()
-    return None
+def extract_location_data(text):
+    """Extracts postcode and weight (if present) from a line."""
+    text = text.strip()
+    pc_pattern = r'([A-Z]{1,2}[0-9][A-Z0-9]?\s?[0-9][A-Z]{2})'
+    weight = 0.0
+    
+    # Check for weight declarations (e.g. , 250kg or : 400)
+    if ',' in text:
+        parts = text.split(',')
+        wm = re.match(r'^([0-9]+(?:\.[0-9]+)?)\s*(?:kg|kilos)?$', parts[-1].strip(), re.IGNORECASE)
+        if wm:
+            weight = float(wm.group(1))
+            text = ','.join(parts[:-1]).strip()
+    elif ':' in text:
+        parts = text.split(':')
+        wm = re.match(r'^([0-9]+(?:\.[0-9]+)?)\s*(?:kg|kilos)?$', parts[-1].strip(), re.IGNORECASE)
+        if wm:
+            weight = float(wm.group(1))
+            text = ':'.join(parts[:-1]).strip()
+    else:
+        wm = re.search(r'\s+([0-9]+(?:\.[0-9]+)?)\s*(?:kg|kilos)$', text, re.IGNORECASE)
+        if wm:
+            weight = float(wm.group(1))
+            text = text[:wm.start()].strip()
+            
+    pc_match = re.search(pc_pattern, text, re.IGNORECASE)
+    pc = pc_match.group(1).upper() if pc_match else None
+    
+    return {'clean_query': text, 'postcode': pc, 'weight': weight}
 
 def geocode_postcodes_bulk(postcode_map):
     results = {}
@@ -128,16 +152,64 @@ def geocode_places_osm(place_list, progress_bar, status_text):
         except Exception: pass
     return results
 
+def capacitated_clustering(points, k, max_weight, force_assign=False):
+    """Knapsack-style algorithm to ensure clusters do not exceed vehicle payloads."""
+    if k == 1:
+        total = sum(p['weight'] for p in points)
+        return {0: points}, (total <= max_weight or force_assign)
+
+    coords = [[p['lat'], p['lon']] for p in points]
+    kmeans = KMeans(n_clusters=k, random_state=42, n_init='auto')
+    kmeans.fit(coords)
+    centers = kmeans.cluster_centers_
+    
+    assignments = {i: [] for i in range(k)}
+    weights = {i: 0.0 for i in range(k)}
+    
+    # Sort drops by heaviest first to pack large items efficiently
+    sorted_points = sorted(points, key=lambda x: x['weight'], reverse=True)
+    
+    success = True
+    for p in sorted_points:
+        p_coord = np.array([p['lat'], p['lon']])
+        dists = [np.linalg.norm(p_coord - c) for c in centers]
+        sorted_centers = np.argsort(dists)
+        
+        assigned = False
+        for c_idx in sorted_centers:
+            if weights[c_idx] + p['weight'] <= max_weight:
+                assignments[c_idx].append(p)
+                weights[c_idx] += p['weight']
+                assigned = True
+                break
+        
+        if not assigned:
+            success = False
+            if force_assign:
+                # If we've maxed out vans, just force it into the closest geographic van
+                best_c = sorted_centers[0]
+                assignments[best_c].append(p)
+                weights[best_c] += p['weight']
+            else:
+                return assignments, False
+                
+    return assignments, success
+
 # --- INTERFACE ---
 col_inputs, col_map = st.columns([1, 2], gap="large")
 
 with col_inputs:
     st.markdown("<h3 class='section-header'>📍 Fleet Parameters</h3>", unsafe_allow_html=True)
     depot_postcode = st.text_input("Depot Postcode (Start & End)", value="B77 5AE")
-    raw_locations = st.text_area("Paste Locations (Names or Postcodes)", height=150, 
-                                 placeholder="e.g.\nCV1 2HN\nTamworth High School B77 3AA\nM&S Banbury")
-    max_vans = st.slider("Maximum Available Vans", min_value=1, max_value=5, value=3,
-                         help="The engine will try to use 1 van. It will only deploy extra vans if shifts exceed 10 hours.")
+    
+    raw_locations = st.text_area("Paste Locations & Weights (e.g. M&S Banbury: 400kg)", height=150, 
+                                 placeholder="e.g.\nCV1 2HN, 250\nTamworth High School B77 3AA\nM&S Banbury: 400kg")
+    
+    col_f1, col_f2 = st.columns(2)
+    with col_f1:
+        max_vans = st.slider("Max Available Vans", min_value=1, max_value=5, value=3)
+    with col_f2:
+        max_weight = st.number_input("Max Weight / Van (kg)", value=1000, step=100)
     
     st.markdown("<h3 class='section-header'>📝 Manifest Data</h3>", unsafe_allow_html=True)
     col_dn1, col_dn2 = st.columns(2)
@@ -145,7 +217,7 @@ with col_inputs:
         job_number = st.text_input("Job Number", placeholder="e.g. 355814")
         delivery_date = st.date_input("Delivery Date", datetime.date.today())
     with col_dn2:
-        job_qty = st.text_input("Quantity Delivered", placeholder="e.g. 300 (Blank for none)")
+        job_qty = st.text_input("Quantity Delivered", placeholder="e.g. 300")
     job_desc = st.text_input("Job Title / Description", placeholder="e.g. Perm POS - Hand Washing...")
     
     st.markdown("<br>", unsafe_allow_html=True)
@@ -156,16 +228,20 @@ with col_map:
     
     if calculate_btn and raw_locations.strip():
         raw_list = [p.strip() for p in raw_locations.split('\n') if p.strip()]
-        raw_list = list(set(raw_list)) 
         
+        parsed_drops = {}
         with_postcodes_map = {} 
         place_names_only = []
-        for loc in raw_list:
-            found_pc = extract_postcode(loc)
-            if found_pc: with_postcodes_map[loc] = found_pc
-            else: place_names_only.append(loc)
         
-        depot_pc_extracted = extract_postcode(depot_postcode) or depot_postcode
+        for raw_loc in raw_list:
+            data = extract_location_data(raw_loc)
+            clean_q = data['clean_query']
+            parsed_drops[clean_q] = data
+            
+            if data['postcode']: with_postcodes_map[clean_q] = data['postcode']
+            else: place_names_only.append(clean_q)
+        
+        depot_pc_extracted = extract_location_data(depot_postcode)['postcode'] or depot_postcode
         depot_data = geocode_postcodes_bulk({depot_postcode: depot_pc_extracted})
         
         if depot_postcode not in depot_data:
@@ -186,17 +262,17 @@ with col_map:
             pb = progress_container.progress(0)
             drop_data.update(geocode_places_osm(place_names_only, pb, status_container))
             progress_container.empty()
-            
-        status_container.text("Evaluating Fleet Configurations...")
         
         valid_drops, failed_drops = [], []
-        for loc in raw_list:
-            if loc in drop_data:
+        for raw_loc in raw_list:
+            clean_q = extract_location_data(raw_loc)['clean_query']
+            if clean_q in drop_data:
                 valid_drops.append({
-                    'query': loc, 'lat': drop_data[loc]['lat'], 'lon': drop_data[loc]['lon'],
-                    'full_address': drop_data[loc]['full_address'], 'postcode': drop_data[loc]['postcode']
+                    'query': clean_q, 'lat': drop_data[clean_q]['lat'], 'lon': drop_data[clean_q]['lon'],
+                    'full_address': drop_data[clean_q]['full_address'], 'postcode': drop_data[clean_q]['postcode'],
+                    'weight': parsed_drops[clean_q]['weight']
                 })
-            else: failed_drops.append(loc)
+            else: failed_drops.append(raw_loc)
                 
         if failed_drops: st.warning(f"Could not find coordinates for: {', '.join(failed_drops)}")
         if not valid_drops:
@@ -205,27 +281,24 @@ with col_map:
             st.stop()
 
         # --- FLEET OPTIMIZER ENGINE ---
-        # Constants for decision making
-        DROP_TIME_HOURS = 15 / 60.0  # 15 mins per drop
-        FLEX_LIMIT_HOURS = 11.5      # 10 hour target + 1.5h buffer to prevent deploying a whole new van
+        DROP_TIME_HOURS = 15 / 60.0  # 15 mins allowed per drop
+        FLEX_LIMIT_HOURS = 11.5      # 10h target + buffer
         
         best_routes_data = {}
         optimal_vans_used = 1
         
         for k in range(1, max_vans + 1):
-            status_container.text(f"Testing cost-efficiency of using {k} van(s)...")
+            status_container.text(f"Testing physical capacities & shift limits for {k} van(s)...")
             actual_k = min(k, len(valid_drops))
+            is_last_attempt = (k == max_vans)
             
-            temp_assignments = {i: [] for i in range(actual_k)}
-            if actual_k > 1:
-                coords = [[d['lat'], d['lon']] for d in valid_drops]
-                kmeans = KMeans(n_clusters=actual_k, random_state=42, n_init='auto')
-                labels = kmeans.fit_predict(coords)
-                for drop, label in zip(valid_drops, labels):
-                    temp_assignments[label].append(drop)
-            else:
-                temp_assignments[0] = valid_drops
+            # 1. Weight Capacity Check
+            temp_assignments, weight_ok = capacitated_clustering(valid_drops, actual_k, max_weight, force_assign=is_last_attempt)
             
+            if not weight_ok and not is_last_attempt:
+                continue 
+                
+            # 2. Shift Duration Check via OSRM
             plan_valid = True
             temp_routes_data = {}
             max_van_time_in_plan = 0
@@ -234,7 +307,7 @@ with col_map:
                 if not drops: continue
                 depot_block = {
                     'query': 'KEP DEPOT', 'full_address': f'KEP Print Group, {depot_postcode}', 
-                    'postcode': depot_pc_extracted, 'lat': depot_lat, 'lon': depot_lon
+                    'postcode': depot_pc_extracted, 'lat': depot_lat, 'lon': depot_lon, 'weight': 0.0
                 }
                 
                 input_points = [depot_block] + drops
@@ -254,33 +327,29 @@ with col_map:
                             max_van_time_in_plan = total_shift_time
                             
                         temp_routes_data[van_id] = {
-                            'route_geom': route['geometry'],
-                            'waypoints': data['waypoints'],
-                            'miles': miles,
-                            'drive_hours': drive_hours,
-                            'total_shift_time': total_shift_time,
+                            'route_geom': route['geometry'], 'waypoints': data['waypoints'],
+                            'miles': miles, 'drive_hours': drive_hours, 'total_shift_time': total_shift_time,
                             'input_points': input_points
                         }
                     else: plan_valid = False
                 except Exception: plan_valid = False
             
-            # Decision Tree
+            # Decision Matrix
             if plan_valid and max_van_time_in_plan <= FLEX_LIMIT_HOURS:
                 best_routes_data = temp_routes_data
                 optimal_vans_used = actual_k
-                break # We found a cost-effective plan that fits!
+                break 
             
             if k == max_vans:
-                # Reached the absolute maximum vehicles allowed, must accept this plan
                 best_routes_data = temp_routes_data
                 optimal_vans_used = actual_k
 
         status_container.empty()
         
         if optimal_vans_used < max_vans:
-            st.success(f"🤖 **Fleet Intelligence:** Assigned {optimal_vans_used} van(s) instead of {max_vans}. Shifts are under safe limits, saving deployment costs.")
+            st.success(f"🤖 **Fleet Intelligence:** Successfully compacted the route into {optimal_vans_used} van(s), protecting payload limits and saving deployment costs.")
         else:
-            st.info(f"🤖 **Fleet Intelligence:** Deployed all {optimal_vans_used} available vans to balance the high workload.")
+            st.info(f"🤖 **Fleet Intelligence:** Maxed out all {optimal_vans_used} available vans to handle the heavy payload and high workload.")
 
         # --- MAP RENDERING ---
         m = folium.Map(location=[depot_lat, depot_lon], zoom_start=6)
@@ -292,10 +361,7 @@ with col_map:
         
         for van_id, r_data in best_routes_data.items():
             color = colors[van_id % len(colors)]
-            
-            miles = r_data['miles']
-            drive_hours = r_data['drive_hours']
-            shift_hours = r_data['total_shift_time']
+            miles, drive_hours, shift_hours = r_data['miles'], r_data['drive_hours'], r_data['total_shift_time']
             input_points = r_data['input_points']
             
             total_miles += miles
@@ -309,24 +375,26 @@ with col_map:
             for i, wp in enumerate(r_data['waypoints']): input_points[i]['sequence'] = wp['waypoint_index']
             optimized_drops = sorted(input_points, key=lambda x: x['sequence'])
             
+            van_payload = sum(p['weight'] for p in optimized_drops)
+            
             for i, p in enumerate(optimized_drops):
                 master_itinerary.append({
                     "Van / Run": f"Van {van_id+1}", "Stop Sequence": i + 1,
                     "Original Search": p['query'], "Extracted Postcode": p['postcode'],
-                    "Full Completed Address": p['full_address']
+                    "Full Completed Address": p['full_address'], "Payload (kg)": p.get('weight', 0.0)
                 })
             
-            st.markdown(f"**🚐 Van {van_id+1} Route** — Est. Drive: {int(drive_hours)}h {int((drive_hours % 1) * 60)}m | Shift Time (w/ drops): {int(shift_hours)}h {int((shift_hours % 1) * 60)}m | Mileage: {miles:.1f} mi")
+            st.markdown(f"**🚐 Van {van_id+1} Route** — Shift: {int(shift_hours)}h {int((shift_hours % 1) * 60)}m | Payload: **{van_payload} kg** | Mileage: {miles:.1f} mi")
             df_display = pd.DataFrame({
                 "Stop": range(1, len(optimized_drops) + 1), "Search": [p['query'] for p in optimized_drops],
-                "Address Found": [p['full_address'] for p in optimized_drops]
+                "Weight (kg)": [p.get('weight', 0.0) for p in optimized_drops]
             })
             st.dataframe(df_display, hide_index=True, use_container_width=True)
             
             for i, p in enumerate(optimized_drops):
                 if p['query'] != 'KEP DEPOT':
                     folium.Marker(
-                        [p['lat'], p['lon']], popup=f"Stop {i+1}: {p['query']}",
+                        [p['lat'], p['lon']], popup=f"Stop {i+1}: {p['query']} ({p.get('weight', 0)}kg)",
                         tooltip=p['full_address'], icon=folium.Icon(color=color, icon="info-sign")
                     ).add_to(m)
         
